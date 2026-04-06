@@ -18,72 +18,99 @@ interface CalibrationPointSelectorProps {
   onCancel: () => void;
 }
 
+interface PendingPoint {
+  id: string;
+  imageX?: number;
+  imageY?: number;
+  lat?: number;
+  lng?: number;
+}
+
 export function CalibrationPointSelector({
   imageUrl,
   onComplete,
   onCancel,
 }: CalibrationPointSelectorProps) {
-  const [points, setPoints] = useState<CalibrationPoint[]>([]);
-  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
-  const [editingMode, setEditingMode] = useState<"image" | "map">("image");
+  const [completedPoints, setCompletedPoints] = useState<CalibrationPoint[]>([]);
+  const [pendingPoint, setPendingPoint] = useState<PendingPoint | null>(null);
+  const [currentMode, setCurrentMode] = useState<"image" | "map" | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   const REQUIRED_POINTS = 5;
+  const pointNumber = completedPoints.length + 1;
+
+  const startNewPoint = (mode: "image" | "map") => {
+    if (completedPoints.length >= REQUIRED_POINTS) return;
+    if (pendingPoint) return; // Already adding a point
+
+    setCurrentMode(mode);
+    setPendingPoint({
+      id: `point-${Date.now()}`,
+    });
+  };
 
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (editingMode !== "image") return;
-    if (points.length >= REQUIRED_POINTS) return;
+    if (!pendingPoint || currentMode !== "image") return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    setPendingPoint((prev) => {
+      if (!prev) return null;
+      return { ...prev, imageX: x, imageY: y };
+    });
+
+    // Switch to map mode
+    setCurrentMode("map");
+  };
+
+  const handleMapPoint = (lat: number, lng: number) => {
+    if (!pendingPoint || currentMode !== "map") return;
+
+    setPendingPoint((prev) => {
+      if (!prev) return null;
+      return { ...prev, lat, lng };
+    });
+  };
+
+  const completePoint = (altitude: number = 0) => {
+    if (!pendingPoint || !pendingPoint.imageX || !pendingPoint.imageY || !pendingPoint.lat || !pendingPoint.lng) {
+      alert("Требуются координаты на обеих сторонах");
+      return;
+    }
+
     const newPoint: CalibrationPoint = {
-      id: `point-${Date.now()}`,
-      imageX: x,
-      imageY: y,
-      lat: 55.7558 + (Math.random() - 0.5) * 0.01,
-      lng: 37.6173 + (Math.random() - 0.5) * 0.01,
-      altitude: 0,
+      id: pendingPoint.id,
+      imageX: pendingPoint.imageX,
+      imageY: pendingPoint.imageY,
+      lat: pendingPoint.lat,
+      lng: pendingPoint.lng,
+      altitude,
     };
 
-    setPoints([...points, newPoint]);
-    setSelectedPointId(newPoint.id);
+    setCompletedPoints([...completedPoints, newPoint]);
+    setPendingPoint(null);
+    setCurrentMode(null);
   };
 
-  const handleMapPointClick = (point: CalibrationPoint) => {
-    if (editingMode !== "map") return;
-    setSelectedPointId(point.id);
+  const cancelPoint = () => {
+    setPendingPoint(null);
+    setCurrentMode(null);
   };
 
-  const updatePointCoordinates = (
-    id: string,
-    lat: number,
-    lng: number,
-    altitude: number
-  ) => {
-    setPoints(
-      points.map((p) => (p.id === id ? { ...p, lat, lng, altitude } : p))
-    );
-  };
-
-  const deletePoint = (id: string) => {
-    setPoints(points.filter((p) => p.id !== id));
-    if (selectedPointId === id) {
-      setSelectedPointId(null);
-    }
+  const deletePoint = (index: number) => {
+    setCompletedPoints(completedPoints.filter((_, i) => i !== index));
   };
 
   const generateGPCFile = () => {
-    if (points.length !== REQUIRED_POINTS) {
+    if (completedPoints.length !== REQUIRED_POINTS) {
       alert(`Пожалуйста, установите все ${REQUIRED_POINTS} контрольных точек`);
       return;
     }
 
-    // Generate GPC file content
-    const gpcContent = generateGPCContent(points);
+    const gpcContent = generateGPCContent(completedPoints);
 
-    // Create and download file
     const element = document.createElement("a");
     element.setAttribute(
       "href",
@@ -95,7 +122,7 @@ export function CalibrationPointSelector({
     element.click();
     document.body.removeChild(element);
 
-    onComplete(points);
+    onComplete(completedPoints);
   };
 
   const generateGPCContent = (calibrationPoints: CalibrationPoint[]): string => {
@@ -109,7 +136,15 @@ export function CalibrationPointSelector({
     return content;
   };
 
-  const selectedPoint = points.find((p) => p.id === selectedPointId);
+  const getProgressText = () => {
+    if (!pendingPoint) {
+      return `Точка ${pointNumber}/${REQUIRED_POINTS}`;
+    }
+    if (!pendingPoint.imageX) {
+      return `Точка ${pointNumber}: Выберите на изображении`;
+    }
+    return `Точка ${pointNumber}: Выберите на карте`;
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -117,35 +152,39 @@ export function CalibrationPointSelector({
         {/* Header */}
         <div className="bg-gradient-to-r from-primary to-secondary text-white p-6 border-b">
           <h2 className="text-2xl font-bold mb-2">Калибровка системы</h2>
-          <p className="text-white/90">
-            Установите {REQUIRED_POINTS} контрольных точек на изображении и карте
-          </p>
+          <p className="text-white/90">{getProgressText()}</p>
         </div>
 
         {/* Content */}
         <div className="flex-1 flex gap-6 p-6 overflow-hidden">
           {/* Left: Image with points */}
           <div className="flex-1 flex flex-col">
-            <div className="mb-3 flex gap-2">
+            <div className="mb-3 flex gap-2 items-center">
               <button
-                onClick={() => setEditingMode("image")}
+                onClick={() => !pendingPoint && startNewPoint("image")}
+                disabled={!!pendingPoint}
                 className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                  editingMode === "image"
+                  currentMode === "image"
                     ? "bg-primary text-white"
-                    : "bg-muted text-foreground hover:bg-muted/80"
+                    : pendingPoint
+                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                      : "bg-muted text-foreground hover:bg-muted/80"
                 }`}
               >
-                📷 Точки на изображении
+                📷 На изображении
               </button>
-              <p className="text-sm text-muted-foreground self-center">
-                {points.length}/{REQUIRED_POINTS}
-              </p>
+              <span className="text-sm font-semibold text-foreground">
+                {completedPoints.length}/{REQUIRED_POINTS}
+              </span>
             </div>
 
             <div
-              ref={imageRef}
               onClick={handleImageClick}
-              className="relative flex-1 rounded-lg overflow-hidden border-2 border-border cursor-crosshair bg-gray-100"
+              className={`relative flex-1 rounded-lg overflow-hidden border-2 transition-all ${
+                currentMode === "image"
+                  ? "border-primary cursor-crosshair bg-blue-50"
+                  : "border-border bg-gray-100 cursor-default"
+              }`}
             >
               <img
                 src={imageUrl}
@@ -153,177 +192,207 @@ export function CalibrationPointSelector({
                 className="w-full h-full object-contain"
               />
 
-              {/* Points on image */}
-              {points.map((point) => (
+              {/* Completed points on image */}
+              {completedPoints.map((point, idx) => (
                 <div
                   key={point.id}
-                  className={`absolute w-8 h-8 rounded-full border-2 transition-all ${
-                    selectedPointId === point.id
-                      ? "bg-primary border-white shadow-lg scale-125"
-                      : "bg-secondary border-white"
-                  }`}
+                  className="absolute w-8 h-8 rounded-full border-2 border-white bg-primary shadow-lg"
                   style={{
                     left: `${point.imageX}px`,
                     top: `${point.imageY}px`,
                     transform: "translate(-50%, -50%)",
-                    cursor: "pointer",
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedPointId(point.id);
-                    setEditingMode("map");
-                  }}
-                  title={`Точка ${points.indexOf(point) + 1}`}
+                  title={`Точка ${idx + 1}`}
                 >
                   <span className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold">
-                    {points.indexOf(point) + 1}
+                    {idx + 1}
                   </span>
                 </div>
               ))}
 
+              {/* Pending point on image */}
+              {pendingPoint?.imageX && (
+                <div
+                  className="absolute w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse"
+                  style={{
+                    left: `${pendingPoint.imageX}px`,
+                    top: `${pendingPoint.imageY}px`,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                  title={`Точка ${pointNumber} (ожидание)`}
+                >
+                  <span className="absolute inset-0 flex items-center justify-center text-amber-900 text-xs font-bold">
+                    {pointNumber}
+                  </span>
+                </div>
+              )}
+
               {/* Instructions */}
-              {points.length === 0 && editingMode === "image" && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+              {currentMode === "image" && !pendingPoint?.imageX && (
+                <div className="absolute inset-0 flex items-center justify-center bg-primary/20 backdrop-blur-sm">
                   <div className="text-center text-white">
                     <p className="text-lg font-semibold mb-2">
-                      Нажмите на изображение для добавления точек
+                      Нажмите на изображение
                     </p>
-                    <p className="text-sm">Требуется {REQUIRED_POINTS} точек</p>
+                    <p className="text-sm">Для установки точки {pointNumber}</p>
+                  </div>
+                </div>
+              )}
+
+              {currentMode !== "image" && completedPoints.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                  <div className="text-center text-white">
+                    <p className="text-lg font-semibold">
+                      Нажмите "На изображении" чтобы начать
+                    </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Points list */}
-            <div className="mt-3 max-h-32 overflow-y-auto">
-              <p className="text-sm font-semibold text-foreground mb-2">
-                Найденные точки:
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {points.map((point, idx) => (
-                  <div
-                    key={point.id}
-                    className={`p-2 rounded-lg border transition-colors cursor-pointer ${
-                      selectedPointId === point.id
-                        ? "bg-primary/10 border-primary"
-                        : "bg-muted border-border hover:bg-muted/80"
-                    }`}
-                    onClick={() => {
-                      setSelectedPointId(point.id);
-                      setEditingMode("map");
-                    }}
-                  >
-                    <p className="text-xs font-bold text-foreground">
-                      Точка {idx + 1}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Пиксели: ({point.imageX.toFixed(0)}, {point.imageY.toFixed(0)})
-                    </p>
-                  </div>
-                ))}
+            {/* Completed points list */}
+            {completedPoints.length > 0 && (
+              <div className="mt-3 max-h-32 overflow-y-auto">
+                <p className="text-sm font-semibold text-foreground mb-2">
+                  Установленные точки:
+                </p>
+                <div className="space-y-1">
+                  {completedPoints.map((point, idx) => (
+                    <div
+                      key={point.id}
+                      className="p-2 rounded-lg bg-green-50 border border-green-200 flex justify-between items-center"
+                    >
+                      <div className="text-xs">
+                        <p className="font-bold text-green-900">Точка {idx + 1}</p>
+                        <p className="text-green-700">
+                          Пиксели: ({point.imageX.toFixed(0)}, {point.imageY.toFixed(0)})
+                        </p>
+                        <p className="text-green-600">
+                          Координаты: ({point.lat.toFixed(4)}, {point.lng.toFixed(4)})
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => deletePoint(idx)}
+                        className="p-1 hover:bg-red-100 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Right: Map and point editor */}
+          {/* Right: Map with point selector */}
           <div className="flex-1 flex flex-col">
-            <div className="mb-3">
+            <div className="mb-3 flex gap-2 items-center">
               <button
-                onClick={() => setEditingMode("map")}
+                onClick={() => !pendingPoint && startNewPoint("map")}
+                disabled={!!pendingPoint}
                 className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                  editingMode === "map"
+                  currentMode === "map"
                     ? "bg-primary text-white"
-                    : "bg-muted text-foreground hover:bg-muted/80"
+                    : pendingPoint
+                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                      : "bg-muted text-foreground hover:bg-muted/80"
                 }`}
               >
-                🗺️ Координаты на карте
+                🗺️ На карте
               </button>
             </div>
 
-            <div className="flex-1 rounded-lg overflow-hidden border-2 border-border">
-              <MapComponent
-                dronePosition={{
-                  lat: selectedPoint?.lat ?? 55.7558,
-                  lng: selectedPoint?.lng ?? 37.6173,
-                }}
-                path={points.map((p) => ({ lat: p.lat, lng: p.lng }))}
-              />
+            <div
+              className={`flex-1 rounded-lg overflow-hidden border-2 transition-all ${
+                currentMode === "map" ? "border-primary" : "border-border"
+              }`}
+            >
+              {currentMode === "map" && pendingPoint ? (
+                <MapClickableComponent
+                  onPointSelect={(lat, lng) => {
+                    handleMapPoint(lat, lng);
+                  }}
+                  selectedPoint={
+                    pendingPoint.lat && pendingPoint.lng
+                      ? { lat: pendingPoint.lat, lng: pendingPoint.lng }
+                      : undefined
+                  }
+                />
+              ) : (
+                <MapComponent
+                  dronePosition={{ lat: 55.7558, lng: 37.6173 }}
+                  path={completedPoints.map((p) => ({
+                    lat: p.lat,
+                    lng: p.lng,
+                  }))}
+                />
+              )}
             </div>
 
-            {/* Point editor */}
-            {selectedPoint && (
-              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="font-semibold text-foreground">
-                    Редактирование точки{" "}
-                    {points.indexOf(selectedPoint) + 1}
+            {/* Point editor for pending point */}
+            {pendingPoint && (
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="mb-3">
+                  <p className="font-semibold text-foreground mb-2">
+                    Добавление точки {pointNumber}
                   </p>
-                  <button
-                    onClick={() => deletePoint(selectedPoint.id)}
-                    className="p-1 hover:bg-red-100 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </button>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Пиксели:</span>
+                      <span className="font-mono font-bold">
+                        {pendingPoint.imageX
+                          ? `(${pendingPoint.imageX.toFixed(0)}, ${pendingPoint.imageY?.toFixed(0)})`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Координаты:</span>
+                      <span className="font-mono font-bold">
+                        {pendingPoint.lat
+                          ? `(${pendingPoint.lat.toFixed(4)}, ${pendingPoint.lng?.toFixed(4)})`
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                      Широта
-                    </label>
-                    <input
-                      type="number"
-                      step="0.000001"
-                      value={selectedPoint.lat}
-                      onChange={(e) =>
-                        updatePointCoordinates(
-                          selectedPoint.id,
-                          parseFloat(e.target.value),
-                          selectedPoint.lng,
-                          selectedPoint.altitude
-                        )
-                      }
-                      className="w-full px-2 py-1 border border-border rounded text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                      Долгота
-                    </label>
-                    <input
-                      type="number"
-                      step="0.000001"
-                      value={selectedPoint.lng}
-                      onChange={(e) =>
-                        updatePointCoordinates(
-                          selectedPoint.id,
-                          selectedPoint.lat,
-                          parseFloat(e.target.value),
-                          selectedPoint.altitude
-                        )
-                      }
-                      className="w-full px-2 py-1 border border-border rounded text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                      Высота (м)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={selectedPoint.altitude}
-                      onChange={(e) =>
-                        updatePointCoordinates(
-                          selectedPoint.id,
-                          selectedPoint.lat,
-                          selectedPoint.lng,
-                          parseFloat(e.target.value)
-                        )
-                      }
-                      className="w-full px-2 py-1 border border-border rounded text-sm"
-                    />
-                  </div>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="Высота (м)"
+                    defaultValue="0"
+                    id="altitude-input"
+                    className="px-2 py-1 border border-border rounded text-sm"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={cancelPoint}
+                    className="flex-1 px-3 py-2 border border-border rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    onClick={() => {
+                      const altitudeInput = document.getElementById(
+                        "altitude-input"
+                      ) as HTMLInputElement;
+                      const altitude = altitudeInput
+                        ? parseFloat(altitudeInput.value)
+                        : 0;
+                      completePoint(altitude);
+                    }}
+                    disabled={!pendingPoint.imageX || !pendingPoint.lat}
+                    className={`flex-1 px-3 py-2 rounded-lg font-semibold transition-colors ${
+                      !pendingPoint.imageX || !pendingPoint.lat
+                        ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-700 text-white"
+                    }`}
+                  >
+                    ✓ Сохранить точку {pointNumber}
+                  </button>
                 </div>
               </div>
             )}
@@ -340,14 +409,59 @@ export function CalibrationPointSelector({
           </Button>
           <Button
             onClick={generateGPCFile}
-            disabled={points.length !== REQUIRED_POINTS}
-            className="btn-primary gap-2 flex items-center"
+            disabled={completedPoints.length !== REQUIRED_POINTS}
+            className={`gap-2 flex items-center ${
+              completedPoints.length !== REQUIRED_POINTS
+                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                : "btn-primary"
+            }`}
           >
             <Download className="w-4 h-4" />
             Сохранить GPC файл
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface MapClickableComponentProps {
+  onPointSelect: (lat: number, lng: number) => void;
+  selectedPoint?: { lat: number; lng: number };
+}
+
+function MapClickableComponent({
+  onPointSelect,
+  selectedPoint,
+}: MapClickableComponentProps) {
+  const mapRef = useRef<HTMLDivElement | null>(null);
+
+  return (
+    <div
+      ref={mapRef}
+      className="w-full h-full flex items-center justify-center relative bg-blue-50"
+      onClick={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+
+        // Convert to approximate lat/lng
+        const lat = 55.7558 + (y - 0.5) * 0.02;
+        const lng = 37.6173 + (x - 0.5) * 0.02;
+
+        onPointSelect(lat, lng);
+      }}
+    >
+      <div className="text-center pointer-events-none">
+        <p className="text-primary font-bold mb-2">Нажмите на карту</p>
+        <p className="text-sm text-muted-foreground">
+          Для установки координат точки
+        </p>
+      </div>
+
+      {selectedPoint && (
+        <div className="absolute w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+      )}
     </div>
   );
 }
