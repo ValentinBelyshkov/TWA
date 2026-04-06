@@ -3,7 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, Square, Settings } from "lucide-react";
 import { TelemetryBar } from "@/components/TelemetryBar";
 import { MapComponent } from "@/components/MapComponent";
-import { CalibrationPointSelector, CalibrationPoint } from "@/components/CalibrationPointSelector";
+import {
+  CalibrationPointSelector,
+  CalibrationPoint,
+} from "@/components/CalibrationPointSelector";
 import { Button } from "@/components/ui/button";
 
 export default function ProjectScreen() {
@@ -14,16 +17,20 @@ export default function ProjectScreen() {
     lat: 55.7558,
     lng: 37.6173,
   });
-  const [dronePath, setDronePath] = useState<Array<{ lat: number; lng: number }>>([]);
+  const [dronePath, setDronePath] = useState<
+    Array<{ lat: number; lng: number }>
+  >([]);
   const [telemetry, setTelemetry] = useState({
     height: 0,
     speed: 0,
     battery: 100,
-    status: "idle" as const,
+    status: "idle" as "idle" | "recording" | "active",
   });
   const [showCalibration, setShowCalibration] = useState(true);
   const [showPointCalibration, setShowPointCalibration] = useState(false);
-  const [calibrationPoints, setCalibrationPoints] = useState<CalibrationPoint[]>([]);
+  const [calibrationPoints, setCalibrationPoints] = useState<
+    CalibrationPoint[]
+  >([]);
   const [recordingComplete, setRecordingComplete] = useState(false);
 
   const handleStartRecording = () => {
@@ -41,7 +48,7 @@ export default function ProjectScreen() {
       setRecordingComplete(true);
       setTelemetry((prev) => ({
         ...prev,
-        status: "idle" as const,
+        status: "idle" as "idle",
       }));
       // Show point calibration interface
       setShowPointCalibration(true);
@@ -83,7 +90,7 @@ export default function ProjectScreen() {
     setShowPointCalibration(true);
     setTelemetry({
       ...telemetry,
-      status: "idle" as const,
+      status: "idle" as "idle",
     });
   };
 
@@ -93,7 +100,7 @@ export default function ProjectScreen() {
     setShowCalibration(false);
     setTelemetry({
       ...telemetry,
-      status: "active" as const,
+      status: "active" as "active",
     });
   };
 
@@ -107,7 +114,7 @@ export default function ProjectScreen() {
     setShowCalibration(false);
     setTelemetry({
       ...telemetry,
-      status: "active" as const,
+      status: "active" as "active",
     });
   };
 
@@ -285,9 +292,7 @@ function OperationScreen({
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               <span className="text-6xl mb-4 block">📷</span>
-              <p className="text-white/60 text-sm">
-                Видеопоток с камеры дрона
-              </p>
+              <p className="text-white/60 text-sm">Видеопоток с камеры дрона</p>
             </div>
           </div>
 
@@ -327,7 +332,8 @@ function OperationScreen({
                 ✓ Запись завершена
               </p>
               <p className="text-xs text-blue-700">
-                Откройте калибровку в окне по центру для установки контрольных точек
+                Откройте калибровку в окне по центру для установки контрольных
+                точек
               </p>
             </div>
           )}
@@ -353,9 +359,7 @@ function OperationScreen({
               <span className="text-muted-foreground">Калибровка:</span>
               <span
                 className={`font-semibold ${
-                  recordingComplete
-                    ? "text-amber-600"
-                    : "text-green-600"
+                  recordingComplete ? "text-amber-600" : "text-green-600"
                 }`}
               >
                 {recordingComplete ? "⏳ Ожидается..." : "✓ Выполнена"}
@@ -365,9 +369,7 @@ function OperationScreen({
               <span className="text-muted-foreground">Запись:</span>
               <span
                 className={`font-semibold ${
-                  recordingComplete
-                    ? "text-green-600"
-                    : "text-muted-foreground"
+                  recordingComplete ? "text-green-600" : "text-muted-foreground"
                 }`}
               >
                 {recordingComplete ? "✓ Готово" : "⊙ Ожидание"}

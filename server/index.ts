@@ -2,6 +2,11 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
+import {
+  handleGetProjects,
+  handleCreateProject,
+  handleDeleteProject,
+} from "./routes/projects";
 
 export function createServer() {
   const app = express();
@@ -18,6 +23,10 @@ export function createServer() {
   });
 
   app.get("/api/demo", handleDemo);
+
+  app.get("/api/projects", handleGetProjects);
+  app.post("/api/projects", handleCreateProject);
+  app.delete("/api/projects/:id", handleDeleteProject);
 
   return app;
 }

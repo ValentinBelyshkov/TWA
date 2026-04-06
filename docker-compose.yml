@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: odometry-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - uploads:/app/uploads
+      - calibrations:/app/calibrations
+    environment:
+      - DATABASE_URL=sqlite:///./odometry.db
+      - VIDEO_SAVE_PATH=/app/uploads
+      - CALIBRATION_PATH=/app/calibrations
+      - CORS_ORIGINS=http://localhost:8080,http://localhost:3000
+    env_file:
+      - .env
+    networks:
+      - odometry-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: odometry-frontend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./client:/app/client
+      - ./shared:/app/shared
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+      - VITE_PUBLIC_BUILDER_KEY=${VITE_PUBLIC_BUILDER_KEY}
+    depends_on:
+      - backend
+    networks:
+      - odometry-network
+
+volumes:
+  uploads:
+  calibrations:
+
+networks:
+  odometry-network:
+    driver: bridge

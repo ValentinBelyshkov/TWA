@@ -45,7 +45,11 @@ export function ProjectModal({
       return;
     }
 
-    onCreateProject(projectName, projectType as ProjectType, videoFile || undefined);
+    onCreateProject(
+      projectName,
+      projectType as ProjectType,
+      videoFile || undefined,
+    );
     handleReset();
   };
 
@@ -93,7 +97,12 @@ export function ProjectModal({
 
             <div className="space-y-2">
               <Label htmlFor="project-type">Тип проекта</Label>
-              <Select value={projectType} onValueChange={setProjectType}>
+              <Select
+                value={projectType}
+                onValueChange={(value) =>
+                  setProjectType(value as ProjectType | "")
+                }
+              >
                 <SelectTrigger id="project-type">
                   <SelectValue placeholder="Выберите тип" />
                 </SelectTrigger>
@@ -135,16 +144,10 @@ export function ProjectModal({
             </AlertDialogAction>
           ) : (
             <>
-              <Button
-                variant="outline"
-                onClick={() => setStep("type")}
-              >
+              <Button variant="outline" onClick={() => setStep("type")}>
                 Назад
               </Button>
-              <AlertDialogAction
-                onClick={handleCreate}
-                disabled={!videoFile}
-              >
+              <AlertDialogAction onClick={handleCreate} disabled={!videoFile}>
                 Создать
               </AlertDialogAction>
             </>

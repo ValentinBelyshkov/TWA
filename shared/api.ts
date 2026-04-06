@@ -10,3 +10,27 @@
 export interface DemoResponse {
   message: string;
 }
+
+export type ProjectType = "камера" | "симуляция";
+
+export interface Project {
+  id: string;
+  name: string;
+  type: ProjectType;
+  createdAt: string;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  type: ProjectType;
+}
+
+export interface CreateProjectResponse {
+  success: boolean;
+  project?: Project;
+  error?: string;
+}
+
+export interface ProjectsResponse {
+  projects: Project[];
+}

@@ -35,7 +35,6 @@ data
 .env
 load-ids.txt
 
-server
 tmp
 types
 .git
@@ -59,4 +58,4 @@ packages/vcp-common/native-bridge/build
 packages/vcp-common/_tests_/dataset-ranking.csv
 node_modules/
 Dockerfile
-.gitignore
+.dockerignore
