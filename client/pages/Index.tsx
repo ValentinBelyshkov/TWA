@@ -1,62 +1,185 @@
-import { DemoResponse } from "@shared/api";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Plus, Trash2, Eye, Settings } from "lucide-react";
+import { ProjectModal, ProjectType } from "@/components/ProjectModal";
+import { Button } from "@/components/ui/button";
+
+interface Project {
+  id: string;
+  name: string;
+  type: ProjectType;
+  createdAt: Date;
+  videoFile?: File;
+}
 
 export default function Index() {
-  const [exampleFromServer, setExampleFromServer] = useState("");
-  // Fetch users on component mount
-  useEffect(() => {
-    fetchDemo();
-  }, []);
+  const [projects, setProjects] = useState<Project[]>([
+    {
+      id: "1",
+      name: "Испытание в поле",
+      type: "камера",
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    },
+    {
+      id: "2",
+      name: "Симуляция дома",
+      type: "симуляция",
+      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
+    },
+  ]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Example of how to fetch data from the server (if needed)
-  const fetchDemo = async () => {
-    try {
-      const response = await fetch("/api/demo");
-      const data = (await response.json()) as DemoResponse;
-      setExampleFromServer(data.message);
-    } catch (error) {
-      console.error("Error fetching hello:", error);
+  const handleCreateProject = (
+    name: string,
+    type: ProjectType,
+    videoFile?: File
+  ) => {
+    const newProject: Project = {
+      id: Date.now().toString(),
+      name,
+      type,
+      createdAt: new Date(),
+      videoFile,
+    };
+    setProjects([newProject, ...projects]);
+  };
+
+  const handleDeleteProject = (id: string) => {
+    if (confirm("Вы уверены, что хотите удалить этот проект?")) {
+      setProjects(projects.filter((p) => p.id !== id));
     }
   };
 
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat("ru-RU", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-      <div className="text-center">
-        {/* TODO: FUSION_GENERATION_APP_PLACEHOLDER replace everything here with the actual app! */}
-        <h1 className="text-2xl font-semibold text-slate-800 flex items-center justify-center gap-3">
-          <svg
-            className="animate-spin h-8 w-8 text-slate-400"
-            viewBox="0 0 50 50"
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Header */}
+      <header className="bg-white border-b border-border shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-xl">🎯</span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Одометрия</h1>
+              <p className="text-sm text-muted-foreground">
+                Визуальная навигация дрона
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            className="btn-primary gap-2"
           >
-            <circle
-              className="opacity-30"
-              cx="25"
-              cy="25"
-              r="20"
-              stroke="currentColor"
-              strokeWidth="5"
-              fill="none"
-            />
-            <circle
-              className="text-slate-600"
-              cx="25"
-              cy="25"
-              r="20"
-              stroke="currentColor"
-              strokeWidth="5"
-              fill="none"
-              strokeDasharray="100"
-              strokeDashoffset="75"
-            />
-          </svg>
-          Generating your app...
-        </h1>
-        <p className="mt-4 text-slate-600 max-w-md">
-          Watch the chat on the left for updates that might need your attention
-          to finish generating
-        </p>
-        <p className="mt-4 hidden max-w-md">{exampleFromServer}</p>
-      </div>
+            <Plus className="w-4 h-4" />
+            Новый проект
+          </Button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-6 py-12">
+        {projects.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl">📦</span>
+            </div>
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              Нет проектов
+            </h2>
+            <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+              Создайте первый проект, чтобы начать работу с визуальной
+              одометрией
+            </p>
+            <Button
+              onClick={() => setIsModalOpen(true)}
+              className="btn-primary gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Создать первый проект
+            </Button>
+          </div>
+        ) : (
+          <div>
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-foreground mb-2">
+                Мои проекты
+              </h2>
+              <p className="text-muted-foreground">
+                {projects.length} {
+                  projects.length % 10 === 1 && projects.length % 100 !== 11
+                    ? "проект"
+                    : "проектов"
+                }
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {projects.map((project) => (
+                <div
+                  key={project.id}
+                  className="bg-white rounded-xl border border-border p-6 card-hover"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-lg flex items-center justify-center">
+                        <span className="text-xl">
+                          {project.type === "камера" ? "📷" : "🎬"}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-foreground truncate text-lg">
+                          {project.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {project.type === "камера" ? "Камера" : "Симуляция"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-muted-foreground">
+                      Создано: {formatDate(project.createdAt)}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Link
+                      to={`/project/${project.id}`}
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Открыть
+                    </Link>
+                    <button
+                      onClick={() => handleDeleteProject(project.id)}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-semibold transition-colors border border-red-200"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      <ProjectModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onCreateProject={handleCreateProject}
+      />
     </div>
   );
 }
