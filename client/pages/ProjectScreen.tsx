@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, Square, Settings } from "lucide-react";
 import { TelemetryBar } from "@/components/TelemetryBar";
 import { MapComponent } from "@/components/MapComponent";
+import { CalibrationPointSelector, CalibrationPoint } from "@/components/CalibrationPointSelector";
 import { Button } from "@/components/ui/button";
 
 export default function ProjectScreen() {
@@ -21,21 +22,37 @@ export default function ProjectScreen() {
     status: "idle" as const,
   });
   const [showCalibration, setShowCalibration] = useState(true);
+  const [showPointCalibration, setShowPointCalibration] = useState(false);
+  const [calibrationPoints, setCalibrationPoints] = useState<CalibrationPoint[]>([]);
+  const [recordingComplete, setRecordingComplete] = useState(false);
 
   const handleStartRecording = () => {
     setIsRecording(true);
+    setRecordingComplete(false);
     setTelemetry({
       ...telemetry,
       status: "recording" as const,
     });
     setDronePath([{ lat: dronePosition.lat, lng: dronePosition.lng }]);
 
-    // Simulate recording and drone movement
-    let height = 0;
-    const interval = setInterval(() => {
-      height += 0.5;
+    // Simulate 15 second recording
+    const timeout = setTimeout(() => {
+      setIsRecording(false);
+      setRecordingComplete(true);
+      setTelemetry((prev) => ({
+        ...prev,
+        status: "idle" as const,
+      }));
+      // Show point calibration interface
+      setShowPointCalibration(true);
+    }, 15000); // 15 seconds
 
-      if (height <= 15) {
+    // Simulate drone movement during recording
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 0.5;
+
+      if (elapsed <= 15) {
         // Simulate drone ascending and moving
         const newLat = dronePosition.lat + (Math.random() - 0.5) * 0.0002;
         const newLng = dronePosition.lng + (Math.random() - 0.5) * 0.0002;
@@ -45,22 +62,44 @@ export default function ProjectScreen() {
 
         setTelemetry((prev) => ({
           ...prev,
-          height: Math.round(height * 10) / 10,
+          height: Math.round(elapsed * 10) / 10,
           speed: 1 + Math.random() * 0.5,
-          battery: Math.max(0, 100 - height * 2),
+          battery: Math.max(0, 100 - elapsed * 2),
         }));
       } else {
         clearInterval(interval);
       }
     }, 300);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   };
 
   const handleStopRecording = () => {
     setIsRecording(false);
+    setRecordingComplete(true);
+    setShowPointCalibration(true);
     setTelemetry({
       ...telemetry,
       status: "idle" as const,
     });
+  };
+
+  const handleCalibrationComplete = (points: CalibrationPoint[]) => {
+    setCalibrationPoints(points);
+    setShowPointCalibration(false);
+    setShowCalibration(false);
+    setTelemetry({
+      ...telemetry,
+      status: "active" as const,
+    });
+  };
+
+  const handleCalibrationCancel = () => {
+    setShowPointCalibration(false);
+    setRecordingComplete(false);
   };
 
   const handleCalibrate = () => {
@@ -100,7 +139,15 @@ export default function ProjectScreen() {
       <TelemetryBar data={telemetry} />
 
       {/* Main Content */}
-      {showCalibration ? (
+      {showPointCalibration && (
+        <CalibrationPointSelector
+          imageUrl="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='400' height='300' fill='%23222'/%3E%3Ctext x='200' y='150' font-size='24' fill='%23666' text-anchor='middle' dominant-baseline='middle'%3EКадр из видео%3C/text%3E%3C/svg%3E"
+          onComplete={handleCalibrationComplete}
+          onCancel={handleCalibrationCancel}
+        />
+      )}
+
+      {showCalibration && !recordingComplete ? (
         <CalibrationScreen onCalibrate={handleCalibrate} />
       ) : (
         <OperationScreen
@@ -110,6 +157,7 @@ export default function ProjectScreen() {
           telemetry={telemetry}
           dronePosition={dronePosition}
           dronePath={dronePath}
+          recordingComplete={recordingComplete}
         />
       )}
     </div>
@@ -218,6 +266,7 @@ interface OperationScreenProps {
     lng: number;
   };
   dronePath: Array<{ lat: number; lng: number }>;
+  recordingComplete?: boolean;
 }
 
 function OperationScreen({
@@ -226,6 +275,7 @@ function OperationScreen({
   onStopRecording,
   dronePosition,
   dronePath,
+  recordingComplete,
 }: OperationScreenProps) {
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 lg:p-6 bg-gradient-to-br from-slate-50 to-blue-50 overflow-auto">
@@ -250,23 +300,36 @@ function OperationScreen({
         </div>
 
         {/* Controls */}
-        <div className="flex gap-3 flex-wrap">
-          {!isRecording ? (
-            <button
-              onClick={onStartRecording}
-              className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
-            >
-              <Play className="w-4 h-4" />
-              Поднять и начать
-            </button>
+        <div className="flex gap-3 flex-wrap flex-col">
+          {!recordingComplete ? (
+            <>
+              {!isRecording ? (
+                <button
+                  onClick={onStartRecording}
+                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Поднять и начать запись
+                </button>
+              ) : (
+                <button
+                  onClick={onStopRecording}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Square className="w-4 h-4" />
+                  Остановить запись
+                </button>
+              )}
+            </>
           ) : (
-            <button
-              onClick={onStopRecording}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-            >
-              <Square className="w-4 h-4" />
-              Остановить
-            </button>
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-semibold text-blue-900 mb-1">
+                ✓ Запись завершена
+              </p>
+              <p className="text-xs text-blue-700">
+                Откройте калибровку в окне по центру для установки контрольных точек
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -288,11 +351,27 @@ function OperationScreen({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Калибровка:</span>
-              <span className="font-semibold text-green-600">✓ Выполнена</span>
+              <span
+                className={`font-semibold ${
+                  recordingComplete
+                    ? "text-amber-600"
+                    : "text-green-600"
+                }`}
+              >
+                {recordingComplete ? "⏳ Ожидается..." : "✓ Выполнена"}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Соединение:</span>
-              <span className="font-semibold text-green-600">✓ Активно</span>
+              <span className="text-muted-foreground">Запись:</span>
+              <span
+                className={`font-semibold ${
+                  recordingComplete
+                    ? "text-green-600"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {recordingComplete ? "✓ Готово" : "⊙ Ожидание"}
+              </span>
             </div>
           </div>
         </div>
