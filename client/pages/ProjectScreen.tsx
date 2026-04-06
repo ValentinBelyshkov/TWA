@@ -2,12 +2,18 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, Square, Settings } from "lucide-react";
 import { TelemetryBar } from "@/components/TelemetryBar";
+import { MapComponent } from "@/components/MapComponent";
 import { Button } from "@/components/ui/button";
 
 export default function ProjectScreen() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
+  const [dronePosition, setDronePosition] = useState({
+    lat: 55.7558,
+    lng: 37.6173,
+  });
+  const [dronePath, setDronePath] = useState<Array<{ lat: number; lng: number }>>([]);
   const [telemetry, setTelemetry] = useState({
     height: 0,
     speed: 0,
@@ -22,15 +28,31 @@ export default function ProjectScreen() {
       ...telemetry,
       status: "recording" as const,
     });
-    // Simulate recording and data updates
-    setTimeout(() => {
-      setTelemetry((prev) => ({
-        ...prev,
-        height: 5,
-        speed: 2,
-        battery: 98,
-      }));
-    }, 500);
+    setDronePath([{ lat: dronePosition.lat, lng: dronePosition.lng }]);
+
+    // Simulate recording and drone movement
+    let height = 0;
+    const interval = setInterval(() => {
+      height += 0.5;
+
+      if (height <= 15) {
+        // Simulate drone ascending and moving
+        const newLat = dronePosition.lat + (Math.random() - 0.5) * 0.0002;
+        const newLng = dronePosition.lng + (Math.random() - 0.5) * 0.0002;
+
+        setDronePosition({ lat: newLat, lng: newLng });
+        setDronePath((prev) => [...prev, { lat: newLat, lng: newLng }]);
+
+        setTelemetry((prev) => ({
+          ...prev,
+          height: Math.round(height * 10) / 10,
+          speed: 1 + Math.random() * 0.5,
+          battery: Math.max(0, 100 - height * 2),
+        }));
+      } else {
+        clearInterval(interval);
+      }
+    }, 300);
   };
 
   const handleStopRecording = () => {
@@ -86,6 +108,8 @@ export default function ProjectScreen() {
           onStartRecording={handleStartRecording}
           onStopRecording={handleStopRecording}
           telemetry={telemetry}
+          dronePosition={dronePosition}
+          dronePath={dronePath}
         />
       )}
     </div>
@@ -189,12 +213,19 @@ interface OperationScreenProps {
     battery: number;
     status: "idle" | "recording" | "active";
   };
+  dronePosition: {
+    lat: number;
+    lng: number;
+  };
+  dronePath: Array<{ lat: number; lng: number }>;
 }
 
 function OperationScreen({
   isRecording,
   onStartRecording,
   onStopRecording,
+  dronePosition,
+  dronePath,
 }: OperationScreenProps) {
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 lg:p-6 bg-gradient-to-br from-slate-50 to-blue-50 overflow-auto">
@@ -243,18 +274,8 @@ function OperationScreen({
       {/* Right side - Map and Info */}
       <div className="w-full lg:w-[45%] flex flex-col gap-4">
         {/* Map */}
-        <div className="flex-1 bg-white rounded-lg border-2 border-border flex items-center justify-center relative overflow-hidden min-h-[300px] lg:min-h-0">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <span className="text-6xl mb-4 block">🗺️</span>
-              <p className="text-muted-foreground text-sm">
-                Карта с позицией дрона
-              </p>
-            </div>
-          </div>
-
-          {/* Drone Position Indicator */}
-          <div className="absolute w-8 h-8 bg-primary rounded-full border-2 border-white shadow-lg animate-pulse top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+        <div className="flex-1 bg-white rounded-lg border-2 border-border relative overflow-hidden min-h-[300px] lg:min-h-0">
+          <MapComponent dronePosition={dronePosition} path={dronePath} />
         </div>
 
         {/* Status Panel */}

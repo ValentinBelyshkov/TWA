@@ -135,4 +135,28 @@
   .card-hover {
     @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
   }
+
+  /* Leaflet Map Styles */
+  #map {
+    @apply w-full h-full;
+    z-index: 10;
+  }
+
+  #map .leaflet-control {
+    @apply rounded-lg shadow-md;
+  }
+
+  #map .leaflet-popup-content-wrapper {
+    @apply rounded-lg shadow-lg border border-border;
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+  }
+
+  #map .leaflet-popup-tip {
+    background-color: hsl(var(--card));
+  }
+
+  #map .leaflet-container {
+    font-family: inherit;
+  }
 }
