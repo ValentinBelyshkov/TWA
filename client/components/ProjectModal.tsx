@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -136,20 +135,20 @@ export function ProjectModal({
         <div className="flex gap-2 justify-end">
           <AlertDialogCancel onClick={handleReset}>Отмена</AlertDialogCancel>
           {step === "type" ? (
-            <AlertDialogAction
+            <Button
               onClick={handleNext}
               disabled={!projectName || !projectType}
             >
               {projectType === "симуляция" ? "Далее" : "Создать"}
-            </AlertDialogAction>
+            </Button>
           ) : (
             <>
               <Button variant="outline" onClick={() => setStep("type")}>
                 Назад
               </Button>
-              <AlertDialogAction onClick={handleCreate} disabled={!videoFile}>
+              <Button onClick={handleCreate} disabled={!videoFile}>
                 Создать
-              </AlertDialogAction>
+              </Button>
             </>
           )}
         </div>

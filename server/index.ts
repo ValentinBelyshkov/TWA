@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
+import path from "path";
+import fs from "fs";
 
 export function createServer() {
   const app = express();
@@ -21,6 +23,18 @@ export function createServer() {
 
   // NOTE: Project management is handled by the Python FastAPI backend (port 8000)
   // Node.js server only provides basic API utilities
+
+  // SPA fallback: serve index.html for all non-API routes in production
+  // In development, Vite handles this
+  if (process.env.NODE_ENV === "production") {
+    const distPath = path.resolve(__dirname, "../dist/spa");
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (_req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+  }
 
   return app;
 }
