@@ -124,3 +124,71 @@ export async function uploadProjectVideo(
 
   return response.json();
 }
+
+// Calibration API
+
+export interface CalibrationPointRequest {
+  imageX: number;
+  imageY: number;
+  lat: number;
+  lng: number;
+  altitude: number;
+}
+
+export async function uploadCalibrationImage(
+  projectId: string,
+  file: File
+): Promise<{ success: boolean; image_filename: string; image_url: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/calibration/upload-image`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `Upload failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function saveGCPPoints(
+  projectId: string,
+  imageFilename: string,
+  points: CalibrationPointRequest[]
+): Promise<{ success: boolean; gcp_filename: string; calibration_status: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/calibration/save-gcp`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image_filename: imageFilename,
+        points: points,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `Save failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getCalibrationStatus(
+  projectId: string
+): Promise<{ project_id: string; calibrated: boolean; calibration_file: string | null }> {
+  return request<{ project_id: string; calibrated: boolean; calibration_file: string | null }>(
+    `/api/projects/${projectId}/calibration/status`
+  );
+}

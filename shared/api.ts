@@ -34,3 +34,31 @@ export interface CreateProjectResponse {
 export interface ProjectsResponse {
   projects: Project[];
 }
+
+// Calibration types
+export interface CalibrationPoint {
+  id: string;
+  imageX: number;
+  imageY: number;
+  lat: number;
+  lng: number;
+  altitude: number;
+}
+
+export interface GCPRequest {
+  projectId: string;
+  imageFilename: string;
+  points: CalibrationPoint[];
+}
+
+export interface CalibrationImageResponse {
+  success: boolean;
+  imageFilename: string;
+  imageUrl: string;
+}
+
+export interface GCPSaveResponse {
+  success: boolean;
+  gcpFilename: string;
+  calibrationStatus: string;
+}

@@ -23,13 +23,13 @@ export default function Index() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ name, type, videoFile }: { name: string; type: ProjectType; videoFile?: File }) =>
-      createProject(name, type).then((project) => {
-        if (videoFile) {
-          return uploadProjectVideo(project.id, videoFile);
-        }
-        return project;
-      }),
+    mutationFn: async ({ name, type, videoFile }: { name: string; type: ProjectType; videoFile?: File }): Promise<Project> => {
+      const project = await createProject(name, type);
+      if (videoFile) {
+        await uploadProjectVideo(project.id, videoFile);
+      }
+      return project;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Проект успешно создан");
