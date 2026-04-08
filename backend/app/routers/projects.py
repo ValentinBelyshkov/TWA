@@ -53,9 +53,14 @@ def read_project_metadata(project_id: str) -> Optional[Project]:
         return None
 
 def write_project_metadata(project: Project) -> None:
-    """Write project metadata to JSON file."""
+    """Write project metadata to JSON file and create project structure."""
     project_path = get_project_path(project.id)
     project_path.mkdir(parents=True, exist_ok=True)
+    
+    # Create subdirectories
+    (project_path / "logs").mkdir(exist_ok=True)
+    (project_path / "calibration").mkdir(exist_ok=True)
+    (project_path / "photos").mkdir(exist_ok=True)
     
     metadata_path = get_metadata_path(project.id)
     with open(metadata_path, "w", encoding="utf-8") as f:
