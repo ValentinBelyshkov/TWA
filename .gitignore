@@ -26,3 +26,32 @@ dist-ssr
 .config/
 !.env
 tsconfig.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+env/
+ENV/
+.venv
+
+# Python virtual environment in backend
+/backend/__pycache__/
+/backend/*/__pycache__/
+/backend/.pytest_cache/
+/backend/*.pyc
+
+# Data directories
+uploads/
+calibrations/
+projects/
+*.db
+*.sqlite
+*.sqlite3

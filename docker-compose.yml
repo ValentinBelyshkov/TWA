@@ -12,6 +12,7 @@ services:
       - ./backend:/app
       - uploads:/app/uploads
       - calibrations:/app/calibrations
+      - projects:/app/projects
     environment:
       - DATABASE_URL=sqlite:///./odometry.db
       - VIDEO_SAVE_PATH=/app/uploads
@@ -44,6 +45,7 @@ services:
 volumes:
   uploads:
   calibrations:
+  projects:
 
 networks:
   odometry-network:
