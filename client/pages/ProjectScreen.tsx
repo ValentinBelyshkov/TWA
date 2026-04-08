@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Play, Square, Settings } from "lucide-react";
+import { ArrowLeft, Play, Square, Settings, Upload, Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { TelemetryBar } from "@/components/TelemetryBar";
 import { MapComponent } from "@/components/MapComponent";
@@ -9,14 +9,16 @@ import {
   CalibrationPoint,
 } from "@/components/CalibrationPointSelector";
 import { Button } from "@/components/ui/button";
-import { getProject, type Project } from "@/lib/api";
+import { getProject, type Project, uploadCalibrationImage, saveGCPPoints } from "@/lib/api";
+
+type CalibrationStep = "instructions" | "upload" | "pairing" | "complete";
 
 export default function ProjectScreen() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
 
-  const { data: project, isLoading, error } = useQuery({
+  const { data: project, isLoading, error, refetch } = useQuery({
     queryKey: ["project", projectId],
     queryFn: () => getProject(projectId!),
     enabled: !!projectId,
@@ -65,16 +67,23 @@ export default function ProjectScreen() {
     battery: 100,
     status: "idle" as "idle" | "recording" | "active",
   });
+  
+  // Calibration workflow state
   const [showCalibration, setShowCalibration] = useState(true);
-  const [showPointCalibration, setShowPointCalibration] = useState(false);
-  const [calibrationPoints, setCalibrationPoints] = useState<
-    CalibrationPoint[]
-  >([]);
-  const [recordingComplete, setRecordingComplete] = useState(false);
+  const [calibrationStep, setCalibrationStep] = useState<CalibrationStep>(
+    project.calibrationStatus === "calibrated" ? "complete" : "instructions"
+  );
+  const [uploadedImage, setUploadedImage] = useState<{
+    filename: string;
+    url: string;
+  } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleStartRecording = () => {
     setIsRecording(true);
-    setRecordingComplete(false);
     setTelemetry({
       ...telemetry,
       status: "recording" as const,
@@ -84,14 +93,11 @@ export default function ProjectScreen() {
     // Simulate 15 second recording
     const timeout = setTimeout(() => {
       setIsRecording(false);
-      setRecordingComplete(true);
       setTelemetry((prev) => ({
         ...prev,
         status: "idle" as "idle",
       }));
-      // Show point calibration interface
-      setShowPointCalibration(true);
-    }, 15000); // 15 seconds
+    }, 15000);
 
     // Simulate drone movement during recording
     let elapsed = 0;
@@ -99,7 +105,6 @@ export default function ProjectScreen() {
       elapsed += 0.5;
 
       if (elapsed <= 15) {
-        // Simulate drone ascending and moving
         const newLat = dronePosition.lat + (Math.random() - 0.5) * 0.0002;
         const newLng = dronePosition.lng + (Math.random() - 0.5) * 0.0002;
 
@@ -125,36 +130,78 @@ export default function ProjectScreen() {
 
   const handleStopRecording = () => {
     setIsRecording(false);
-    setRecordingComplete(true);
-    setShowPointCalibration(true);
     setTelemetry({
       ...telemetry,
       status: "idle" as "idle",
     });
   };
 
-  const handleCalibrationComplete = (points: CalibrationPoint[]) => {
-    setCalibrationPoints(points);
-    setShowPointCalibration(false);
+  const handleCalibrate = () => {
+    if (project.calibrationStatus === "calibrated") {
+      setCalibrationStep("complete");
+    } else {
+      setCalibrationStep("instructions");
+    }
     setShowCalibration(false);
-    setTelemetry({
-      ...telemetry,
-      status: "active" as "active",
-    });
+  };
+
+  // Calibration workflow handlers
+  const handleInstructionsNext = () => {
+    setCalibrationStep("upload");
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !projectId) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const result = await uploadCalibrationImage(projectId, file);
+      setUploadedImage({
+        filename: result.image_filename,
+        url: result.image_url,
+      });
+      setCalibrationStep("pairing");
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Ошибка загрузки изображения");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCalibrationComplete = async (points: CalibrationPoint[]) => {
+    if (!projectId || !uploadedImage) return;
+
+    try {
+      await saveGCPPoints(
+        projectId,
+        uploadedImage.filename,
+        points.map(p => ({
+          imageX: p.imageX,
+          imageY: p.imageY,
+          lat: p.lat,
+          lng: p.lng,
+          altitude: p.altitude,
+        }))
+      );
+      await refetch();
+      setCalibrationStep("complete");
+      setShowCalibration(false);
+      setTelemetry({
+        ...telemetry,
+        status: "active" as "active",
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Ошибка сохранения точек");
+    }
   };
 
   const handleCalibrationCancel = () => {
-    setShowPointCalibration(false);
-    setRecordingComplete(false);
-  };
-
-  const handleCalibrate = () => {
-    // In a real app, this would navigate to calibration screen
-    setShowCalibration(false);
-    setTelemetry({
-      ...telemetry,
-      status: "active" as "active",
-    });
+    setShowCalibration(true);
+    setCalibrationStep("instructions");
+    setUploadedImage(null);
   };
 
   return (
@@ -175,6 +222,9 @@ export default function ProjectScreen() {
             </h1>
             <p className="text-sm text-muted-foreground">
               {project.type === "камера" ? "Камера" : "Симуляция"}
+              {project.calibrationStatus === "calibrated" && (
+                <span className="ml-2 text-green-600">✓ Откалибровано</span>
+              )}
             </p>
           </div>
         </div>
@@ -187,17 +237,23 @@ export default function ProjectScreen() {
       <TelemetryBar data={telemetry} />
 
       {/* Main Content */}
-      {showPointCalibration && (
-        <CalibrationPointSelector
-          imageUrl="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='400' height='300' fill='%23222'/%3E%3Ctext x='200' y='150' font-size='24' fill='%23666' text-anchor='middle' dominant-baseline='middle'%3EКадр из видео%3C/text%3E%3C/svg%3E"
-          onComplete={handleCalibrationComplete}
-          onCancel={handleCalibrationCancel}
+      {calibrationStep !== "complete" && (
+        <CalibrationWorkflow
+          step={calibrationStep}
+          uploadedImage={uploadedImage}
+          uploadError={uploadError}
+          isUploading={isUploading}
+          onInstructionsNext={handleInstructionsNext}
+          onImageUpload={handleImageUpload}
+          onCalibrationComplete={handleCalibrationComplete}
+          onCalibrationCancel={handleCalibrationCancel}
+          onUploadErrorDismiss={() => setUploadError(null)}
+          fileInputRef={fileInputRef}
+          projectId={projectId || undefined}
         />
       )}
 
-      {showCalibration && !recordingComplete ? (
-        <CalibrationScreen onCalibrate={handleCalibrate} />
-      ) : (
+      {calibrationStep === "complete" && (
         <OperationScreen
           isRecording={isRecording}
           onStartRecording={handleStartRecording}
@@ -205,18 +261,75 @@ export default function ProjectScreen() {
           telemetry={telemetry}
           dronePosition={dronePosition}
           dronePath={dronePath}
-          recordingComplete={recordingComplete}
+          showCalibration={showCalibration}
+          onCalibrate={handleCalibrate}
         />
       )}
     </div>
   );
 }
 
-interface CalibrationScreenProps {
-  onCalibrate: () => void;
+interface CalibrationWorkflowProps {
+  step: CalibrationStep;
+  uploadedImage: { filename: string; url: string } | null;
+  uploadError: string | null;
+  isUploading: boolean;
+  onInstructionsNext: () => void;
+  onImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onCalibrationComplete: (points: CalibrationPoint[]) => void;
+  onCalibrationCancel: () => void;
+  onUploadErrorDismiss: () => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  projectId?: string;
 }
 
-function CalibrationScreen({ onCalibrate }: CalibrationScreenProps) {
+function CalibrationWorkflow({
+  step,
+  uploadedImage,
+  uploadError,
+  isUploading,
+  onInstructionsNext,
+  onImageUpload,
+  onCalibrationComplete,
+  onCalibrationCancel,
+  onUploadErrorDismiss,
+  fileInputRef,
+  projectId,
+}: CalibrationWorkflowProps) {
+  if (step === "instructions") {
+    return (
+      <InstructionsStep onNext={onInstructionsNext} />
+    );
+  }
+
+  if (step === "upload") {
+    return (
+      <ImageUploadStep
+        onUpload={onImageUpload}
+        uploadError={uploadError}
+        isUploading={isUploading}
+        onErrorDismiss={onUploadErrorDismiss}
+        fileInputRef={fileInputRef}
+      />
+    );
+  }
+
+  if (step === "pairing" && uploadedImage) {
+    return (
+      <CalibrationPointSelector
+        imageUrl={uploadedImage.url}
+        onComplete={onCalibrationComplete}
+        onCancel={onCalibrationCancel}
+        projectId={projectId}
+        imageFilename={uploadedImage.filename}
+      />
+    );
+  }
+
+  return null;
+}
+
+function InstructionsStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-blue-50">
       <div className="bg-white rounded-2xl border border-border shadow-lg p-12 max-w-lg w-full">
@@ -228,17 +341,17 @@ function CalibrationScreen({ onCalibrate }: CalibrationScreenProps) {
             Калибровка системы
           </h2>
           <p className="text-muted-foreground">
-            Перед началом работы необходимо выполнить калибровку
+            Процесс калибровки состоит из нескольких этапов
           </p>
         </div>
 
         <div className="space-y-4 mb-8">
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h3 className="font-semibold text-foreground mb-2">
-              Нет калибровочного файла
+              Создание калибровочного файла
             </h3>
             <p className="text-sm text-muted-foreground">
-              Пожалуйста, создайте калибровочный файл, следуя инструкциям ниже
+              Следуйте инструкциям ниже для создания файла привязки координат
             </p>
           </div>
 
@@ -249,10 +362,10 @@ function CalibrationScreen({ onCalibrate }: CalibrationScreenProps) {
               </div>
               <div>
                 <p className="font-semibold text-foreground">
-                  Поднимите дрон в воздух
+                  Ознакомьтесь с инструкцией
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Убедитесь, что дрон стабилен на высоте ~2 метра
+                  Понять процесс выбора контрольных точек
                 </p>
               </div>
             </div>
@@ -263,10 +376,10 @@ function CalibrationScreen({ onCalibrate }: CalibrationScreenProps) {
               </div>
               <div>
                 <p className="font-semibold text-foreground">
-                  Нажмите кнопку "Начать"
+                  Загрузите изображение
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Система запишет 15 секунд видео для анализа
+                  Выберите снимок с дрона для калибровки
                 </p>
               </div>
             </div>
@@ -277,10 +390,24 @@ function CalibrationScreen({ onCalibrate }: CalibrationScreenProps) {
               </div>
               <div>
                 <p className="font-semibold text-foreground">
-                  Установите контрольные точки
+                  Установите 5 контрольных точек
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Выберите 5 точек на экране для калибровки
+                  Сначала кликните на изображении, затем на карте
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 items-start">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-500 text-white font-bold text-sm flex-shrink-0 mt-1">
+                4
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">
+                  Сохраните GCP файл
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Файл будет сохранён в папку проекта с заголовком +proj=utm
                 </p>
               </div>
             </div>
@@ -288,12 +415,91 @@ function CalibrationScreen({ onCalibrate }: CalibrationScreenProps) {
         </div>
 
         <button
-          onClick={onCalibrate}
+          onClick={onNext}
           className="w-full btn-primary py-3 flex items-center justify-center gap-2"
         >
           <Play className="w-4 h-4" />
-          Начать калибровку
+          Продолжить
         </button>
+      </div>
+    </div>
+  );
+}
+
+interface ImageUploadStepProps {
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  uploadError: string | null;
+  isUploading: boolean;
+  onErrorDismiss: () => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+}
+
+function ImageUploadStep({
+  onUpload,
+  uploadError,
+  isUploading,
+  onErrorDismiss,
+  fileInputRef,
+}: ImageUploadStepProps) {
+  return (
+    <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="bg-white rounded-2xl border border-border shadow-lg p-12 max-w-lg w-full">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-4xl">📷</span>
+          </div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Загрузка изображения
+          </h2>
+          <p className="text-muted-foreground">
+            Выберите изображение с дрона для калибровки
+          </p>
+        </div>
+
+        {uploadError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600">{uploadError}</p>
+            <button
+              onClick={onErrorDismiss}
+              className="text-xs text-red-500 underline mt-2"
+            >
+              Закрыть
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-border rounded-xl p-12 text-center cursor-pointer hover:border-primary hover:bg-blue-50/50 transition-all"
+          >
+            {isUploading ? (
+              <div className="flex flex-col items-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                <p className="text-muted-foreground">Загрузка...</p>
+              </div>
+            ) : (
+              <>
+                <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="font-semibold text-foreground mb-2">
+                  Нажмите для выбора файла
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Поддерживаются форматы: JPG, PNG
+                </p>
+              </>
+            )}
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/jpg"
+            onChange={onUpload}
+            className="hidden"
+            disabled={isUploading}
+          />
+        </div>
       </div>
     </div>
   );
@@ -314,7 +520,8 @@ interface OperationScreenProps {
     lng: number;
   };
   dronePath: Array<{ lat: number; lng: number }>;
-  recordingComplete?: boolean;
+  showCalibration: boolean;
+  onCalibrate: () => void;
 }
 
 function OperationScreen({
@@ -323,7 +530,8 @@ function OperationScreen({
   onStopRecording,
   dronePosition,
   dronePath,
-  recordingComplete,
+  showCalibration,
+  onCalibrate,
 }: OperationScreenProps) {
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 lg:p-6 bg-gradient-to-br from-slate-50 to-blue-50 overflow-auto">
@@ -347,7 +555,15 @@ function OperationScreen({
 
         {/* Controls */}
         <div className="flex gap-3 flex-wrap flex-col">
-          {!recordingComplete ? (
+          {showCalibration ? (
+            <button
+              onClick={onCalibrate}
+              className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              Калибровка
+            </button>
+          ) : (
             <>
               {!isRecording ? (
                 <button
@@ -367,16 +583,6 @@ function OperationScreen({
                 </button>
               )}
             </>
-          ) : (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm font-semibold text-blue-900 mb-1">
-                ✓ Запись завершена
-              </p>
-              <p className="text-xs text-blue-700">
-                Откройте калибровку в окне по центру для установки контрольных
-                точек
-              </p>
-            </div>
           )}
         </div>
       </div>
@@ -400,20 +606,20 @@ function OperationScreen({
               <span className="text-muted-foreground">Калибровка:</span>
               <span
                 className={`font-semibold ${
-                  recordingComplete ? "text-amber-600" : "text-green-600"
+                  showCalibration ? "text-amber-600" : "text-green-600"
                 }`}
               >
-                {recordingComplete ? "⏳ Ожидается..." : "✓ Выполнена"}
+                {showCalibration ? "⏳ Требуется" : "✓ Выполнена"}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Запись:</span>
               <span
                 className={`font-semibold ${
-                  recordingComplete ? "text-green-600" : "text-muted-foreground"
+                  isRecording ? "text-red-600" : "text-muted-foreground"
                 }`}
               >
-                {recordingComplete ? "✓ Готово" : "⊙ Ожидание"}
+                {isRecording ? "● Запись" : "⊙ Ожидание"}
               </span>
             </div>
           </div>

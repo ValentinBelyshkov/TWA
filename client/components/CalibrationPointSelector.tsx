@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { Trash2, Download } from "lucide-react";
+import { Trash2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MapComponent } from "@/components/MapComponent";
+import { saveGCPPoints, type CalibrationPointRequest } from "@/lib/api";
 
 export interface CalibrationPoint {
   id: string;
@@ -16,6 +17,8 @@ interface CalibrationPointSelectorProps {
   imageUrl: string;
   onComplete: (points: CalibrationPoint[]) => void;
   onCancel: () => void;
+  projectId?: string;
+  imageFilename?: string;
 }
 
 interface PendingPoint {
@@ -30,11 +33,14 @@ export function CalibrationPointSelector({
   imageUrl,
   onComplete,
   onCancel,
+  projectId,
+  imageFilename,
 }: CalibrationPointSelectorProps) {
   const [completedPoints, setCompletedPoints] = useState<CalibrationPoint[]>([]);
   const [pendingPoint, setPendingPoint] = useState<PendingPoint | null>(null);
   const [currentMode, setCurrentMode] = useState<"image" | "map" | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const REQUIRED_POINTS = 5;
   const pointNumber = completedPoints.length + 1;
@@ -103,34 +109,58 @@ export function CalibrationPointSelector({
     setCompletedPoints(completedPoints.filter((_, i) => i !== index));
   };
 
-  const generateGPCFile = () => {
+  const handleSaveGCP = async () => {
     if (completedPoints.length !== REQUIRED_POINTS) {
       alert(`Пожалуйста, установите все ${REQUIRED_POINTS} контрольных точек`);
       return;
     }
 
-    const gpcContent = generateGPCContent(completedPoints);
+    // If we have projectId and imageFilename, save to backend
+    if (projectId && imageFilename) {
+      setIsSaving(true);
+      setSaveError(null);
 
-    const element = document.createElement("a");
-    element.setAttribute(
-      "href",
-      "data:text/plain;charset=utf-8," + encodeURIComponent(gpcContent)
-    );
-    element.setAttribute("download", "calibration.gpc");
-    element.style.display = "none";
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+      try {
+        const points: CalibrationPointRequest[] = completedPoints.map(p => ({
+          imageX: p.imageX,
+          imageY: p.imageY,
+          lat: p.lat,
+          lng: p.lng,
+          altitude: p.altitude,
+        }));
 
-    onComplete(completedPoints);
+        await saveGCPPoints(projectId, imageFilename, points);
+        onComplete(completedPoints);
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : "Ошибка сохранения");
+        setIsSaving(false);
+      }
+    } else {
+      // Fallback to local download if no projectId
+      const gpcContent = generateGPCContent(completedPoints);
+
+      const element = document.createElement("a");
+      element.setAttribute(
+        "href",
+        "data:text/plain;charset=utf-8," + encodeURIComponent(gpcContent)
+      );
+      element.setAttribute("download", "calibration.gpc");
+      element.style.display = "none";
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+
+      onComplete(completedPoints);
+    }
   };
 
   const generateGPCContent = (calibrationPoints: CalibrationPoint[]): string => {
-    let content = "image.jpg\n";
+    let content = "+proj=utm +zone=37 +datum=WGS84\n";
+    content += "image.jpg\n";
     content += `${calibrationPoints.length}\n`;
 
     calibrationPoints.forEach((point) => {
-      content += `${point.imageX.toFixed(2)} ${point.imageY.toFixed(2)} ${point.lng.toFixed(6)} ${point.lat.toFixed(6)} ${point.altitude.toFixed(2)}\n`;
+      content += `${point.imageX.toFixed(6)} ${point.imageY.toFixed(6)} ${point.lng.toFixed(6)} ${point.lat.toFixed(6)} ${point.altitude.toFixed(2)}\n`;
     });
 
     return content;
@@ -180,7 +210,7 @@ export function CalibrationPointSelector({
 
             <div
               onClick={handleImageClick}
-              className={`relative flex-1 rounded-lg overflow-hidden border-2 transition-all ${
+              className={`relative flex-1 rounded-lg overflow-hidden border-2 transition-all min-h-[300px] ${
                 currentMode === "image"
                   ? "border-primary cursor-crosshair bg-blue-50"
                   : "border-border bg-gray-100 cursor-default"
@@ -303,7 +333,7 @@ export function CalibrationPointSelector({
             </div>
 
             <div
-              className={`flex-1 rounded-lg overflow-hidden border-2 transition-all ${
+              className={`flex-1 rounded-lg overflow-hidden border-2 transition-all min-h-[300px] ${
                 currentMode === "map" ? "border-primary" : "border-border"
               }`}
             >
@@ -401,23 +431,40 @@ export function CalibrationPointSelector({
 
         {/* Footer */}
         <div className="bg-gray-50 border-t border-border p-6 flex gap-3 justify-end">
+          {saveError && (
+            <div className="flex-1 max-w-xs">
+              <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                {saveError}
+              </p>
+            </div>
+          )}
           <Button
             onClick={onCancel}
             className="px-6 py-2 border border-border rounded-lg font-semibold hover:bg-muted transition-colors"
+            disabled={isSaving}
           >
             Отмена
           </Button>
           <Button
-            onClick={generateGPCFile}
-            disabled={completedPoints.length !== REQUIRED_POINTS}
+            onClick={handleSaveGCP}
+            disabled={completedPoints.length !== REQUIRED_POINTS || isSaving}
             className={`gap-2 flex items-center ${
-              completedPoints.length !== REQUIRED_POINTS
+              completedPoints.length !== REQUIRED_POINTS || isSaving
                 ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                 : "btn-primary"
             }`}
           >
-            <Download className="w-4 h-4" />
-            Сохранить GPC файл
+            {isSaving ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Сохранение...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Сохранить GCP файл
+              </>
+            )}
           </Button>
         </div>
       </div>

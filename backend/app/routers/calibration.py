@@ -1,28 +1,172 @@
 import os
 import uuid
-import cv2
-import numpy as np
-from fastapi import APIRouter, HTTPException
+import json
+from pathlib import Path
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import aiofiles
 
+from app.routers.projects import (
+    PROJECTS_ROOT,
+    get_project_path,
+    read_project_metadata,
+    write_project_metadata,
+)
+
 router = APIRouter()
 
-class CalibrationFramePoint(BaseModel):
-    x: float
-    y: float
+class CalibrationPointRequest(BaseModel):
+    imageX: float
+    imageY: float
+    lat: float
+    lng: float
+    altitude: float
 
-class CalibrationFrame(BaseModel):
-    points: List[CalibrationFramePoint]
+class GCPSaveRequest(BaseModel):
+    image_filename: str
+    points: List[CalibrationPointRequest]
 
-class CalibrationSaveRequest(BaseModel):
+class CalibrationStatusResponse(BaseModel):
     project_id: str
-    frames: List[CalibrationFrame]
-    frame_urls: List[str]
+    calibrated: bool
+    calibration_file: Optional[str] = None
 
-calibrations_db = {}
+@router.post("/{project_id}/upload-image")
+async def upload_calibration_image(project_id: str, file: UploadFile = File(...)):
+    """Upload a calibration image to the project folder."""
+    project = read_project_metadata(project_id)
+    
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_path = get_project_path(project_id)
+    calibrations_dir = project_path / "calibrations"
+    calibrations_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Use original filename for the calibration image
+    save_path = calibrations_dir / file.filename
+    
+    with open(save_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    
+    return {
+        "success": True,
+        "image_filename": file.filename,
+        "image_url": f"/api/projects/{project_id}/calibration/images/{file.filename}"
+    }
+
+@router.get("/{project_id}/images/{image_name}")
+async def get_calibration_image(project_id: str, image_name: str):
+    """Serve calibration images from the project folder."""
+    project_path = get_project_path(project_id)
+    image_path = project_path / "calibrations" / image_name
+    
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Determine content type based on extension
+    ext = image_name.lower().split('.')[-1] if '.' in image_name else 'jpg'
+    content_type = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp'
+    }.get(ext, 'image/jpeg')
+    
+    async def file_iterator():
+        async with aiofiles.open(image_path, 'rb') as f:
+            while True:
+                chunk = await f.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+    
+    return StreamingResponse(
+        file_iterator(),
+        media_type=content_type,
+        headers={"Content-Disposition": f"inline; filename={image_name}"}
+    )
+
+@router.post("/{project_id}/save-gcp")
+async def save_gcp_file(project_id: str, request: GCPSaveRequest):
+    """Save GCP (Ground Control Points) file with +proj=utm header."""
+    project = read_project_metadata(project_id)
+    
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if len(request.points) != 5:
+        raise HTTPException(status_code=400, detail="Must provide exactly 5 points")
+    
+    project_path = get_project_path(project_id)
+    calibrations_dir = project_path / "calibrations"
+    calibrations_dir.mkdir(parents=True, exist_ok=True)
+    
+    gcp_filename = f"{Path(request.image_filename).stem}.gpc"
+    gcp_path = calibrations_dir / gcp_filename
+    
+    # Generate GCP file content with +proj=utm header
+    gpc_content = f"+proj=utm +zone=37 +datum=WGS84\n"
+    gpc_content += f"{request.image_filename}\n"
+    gpc_content += f"{len(request.points)}\n"
+    
+    for point in request.points:
+        # Format: x y lng lat altitude
+        gpc_content += f"{point.imageX:.6f} {point.imageY:.6f} {point.lng:.6f} {point.lat:.6f} {point.altitude:.2f}\n"
+    
+    with open(gcp_path, "w", encoding="utf-8") as f:
+        f.write(gpc_content)
+    
+    # Update project metadata
+    project.calibration_status = "calibrated"
+    write_project_metadata(project)
+    
+    return {
+        "success": True,
+        "gcp_filename": gcp_filename,
+        "calibration_status": "calibrated"
+    }
+
+@router.get("/{project_id}/status")
+async def get_calibration_status(project_id: str):
+    """Check if project has calibration."""
+    project = read_project_metadata(project_id)
+    
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_path = get_project_path(project_id)
+    calibrations_dir = project_path / "calibrations"
+    
+    if not calibrations_dir.exists():
+        return {
+            "project_id": project_id,
+            "calibrated": False,
+            "calibration_file": None
+        }
+    
+    # Find any .gpc files
+    gpc_files = list(calibrations_dir.glob("*.gpc"))
+    
+    if gpc_files:
+        return {
+            "project_id": project_id,
+            "calibrated": True,
+            "calibration_file": str(gpc_files[0])
+        }
+    
+    return {
+        "project_id": project_id,
+        "calibrated": False,
+        "calibration_file": None
+    }
+
+# Legacy endpoints for backward compatibility
 
 @router.post("/start")
 async def start_calibration(project_id: str):
@@ -37,6 +181,9 @@ async def start_calibration(project_id: str):
     for i in range(3):
         frame_path = f"{frames_dir}/frame_{i}.jpg"
         
+        # Create a simple placeholder image
+        import numpy as np
+        import cv2
         img = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
         cv2.imwrite(frame_path, img)
         
@@ -69,58 +216,3 @@ async def get_frame(project_id: str, frame_name: str):
         media_type="image/jpeg",
         headers={"Content-Disposition": f"inline; filename={frame_name}"}
     )
-
-@router.post("/save")
-async def save_calibration(request: CalibrationSaveRequest):
-    """Save calibration with point data from 5 points on each of 3 frames."""
-    if len(request.frames) != 3:
-        raise HTTPException(status_code=400, detail="Must provide 3 frames")
-    
-    for frame in request.frames:
-        if len(frame.points) != 5:
-            raise HTTPException(status_code=400, detail="Each frame must have exactly 5 points")
-    
-    calibration_id = str(uuid.uuid4())
-    calibration_data = {
-        "id": calibration_id,
-        "project_id": request.project_id,
-        "frames": [frame.dict() for frame in request.frames],
-        "frame_urls": request.frame_urls,
-        "created_at": datetime.now().isoformat()
-    }
-    
-    calibrations_db[calibration_id] = calibration_data
-    
-    cal_file_path = f"/app/calibrations/{request.project_id}/calibration.gpc"
-    with open(cal_file_path, "w") as f:
-        f.write(f"image.jpg\n")
-        f.write(f"15\n")
-        for frame in request.frames:
-            for point in frame.points:
-                f.write(f"{point.x:.2f} {point.y:.2f} 37.617300 55.755800 0.00\n")
-    
-    for project in projects_db:
-        if project.id == request.project_id:
-            project.calibration_status = "calibrated"
-            break
-    
-    return {
-        "calibration_id": calibration_id,
-        "calibration_file": cal_file_path,
-        "status": "saved"
-    }
-
-@router.get("/status/{project_id}")
-async def get_calibration_status(project_id: str):
-    """Check if project has calibration."""
-    cal_file_path = f"/app/calibrations/{project_id}/calibration.gpc"
-    calibrated = os.path.exists(cal_file_path)
-    
-    return {
-        "project_id": project_id,
-        "calibrated": calibrated,
-        "calibration_file": cal_file_path if calibrated else None
-    }
-
-from fastapi.responses import StreamingResponse
-from app.routers import projects

@@ -26,8 +26,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Projects router (includes calibration endpoints for projects)
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
-app.include_router(calibration.router, prefix="/api/calibration", tags=["calibration"])
+# Mount calibration sub-router under projects
+app.include_router(calibration.router, prefix="/api/projects", tags=["calibration"])
+
+# Standalone telemetry and control routers
 app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"])
 app.include_router(control.router, prefix="/api/control", tags=["control"])
 
