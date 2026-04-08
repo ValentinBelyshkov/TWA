@@ -2,7 +2,7 @@ import os
 import uuid
 import json
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -10,7 +10,7 @@ from datetime import datetime
 import aiofiles
 
 from app.routers.projects import (
-    PROJECTS_ROOT,
+    get_projects_root,
     get_project_path,
     read_project_metadata,
     write_project_metadata,
@@ -35,14 +35,15 @@ class CalibrationStatusResponse(BaseModel):
     calibration_file: Optional[str] = None
 
 @router.post("/{project_id}/upload-image")
-async def upload_calibration_image(project_id: str, file: UploadFile = File(...)):
+async def upload_calibration_image(request: Request, project_id: str, file: UploadFile = File(...)):
     """Upload a calibration image to the project folder."""
-    project = read_project_metadata(project_id)
+    projects_root = get_projects_root(request)
+    project = read_project_metadata(projects_root, project_id)
     
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    project_path = get_project_path(project_id)
+    project_path = get_project_path(projects_root, project_id)
     calibrations_dir = project_path / "calibrations"
     calibrations_dir.mkdir(parents=True, exist_ok=True)
     
@@ -60,9 +61,10 @@ async def upload_calibration_image(project_id: str, file: UploadFile = File(...)
     }
 
 @router.get("/{project_id}/images/{image_name}")
-async def get_calibration_image(project_id: str, image_name: str):
+async def get_calibration_image(request: Request, project_id: str, image_name: str):
     """Serve calibration images from the project folder."""
-    project_path = get_project_path(project_id)
+    projects_root = get_projects_root(request)
+    project_path = get_project_path(projects_root, project_id)
     image_path = project_path / "calibrations" / image_name
     
     if not image_path.exists():
@@ -93,29 +95,30 @@ async def get_calibration_image(project_id: str, image_name: str):
     )
 
 @router.post("/{project_id}/save-gcp")
-async def save_gcp_file(project_id: str, request: GCPSaveRequest):
+async def save_gcp_file(request: Request, project_id: str, gcp_request: GCPSaveRequest):
     """Save GCP (Ground Control Points) file with +proj=utm header."""
-    project = read_project_metadata(project_id)
+    projects_root = get_projects_root(request)
+    project = read_project_metadata(projects_root, project_id)
     
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    if len(request.points) != 5:
+    if len(gcp_request.points) != 5:
         raise HTTPException(status_code=400, detail="Must provide exactly 5 points")
     
-    project_path = get_project_path(project_id)
+    project_path = get_project_path(projects_root, project_id)
     calibrations_dir = project_path / "calibrations"
     calibrations_dir.mkdir(parents=True, exist_ok=True)
     
-    gcp_filename = f"{Path(request.image_filename).stem}.gpc"
+    gcp_filename = f"{Path(gcp_request.image_filename).stem}.gpc"
     gcp_path = calibrations_dir / gcp_filename
     
     # Generate GCP file content with +proj=utm header
     gpc_content = f"+proj=utm +zone=37 +datum=WGS84\n"
-    gpc_content += f"{request.image_filename}\n"
-    gpc_content += f"{len(request.points)}\n"
+    gpc_content += f"{gcp_request.image_filename}\n"
+    gpc_content += f"{len(gcp_request.points)}\n"
     
-    for point in request.points:
+    for point in gcp_request.points:
         # Format: x y lng lat altitude
         gpc_content += f"{point.imageX:.6f} {point.imageY:.6f} {point.lng:.6f} {point.lat:.6f} {point.altitude:.2f}\n"
     
@@ -124,7 +127,7 @@ async def save_gcp_file(project_id: str, request: GCPSaveRequest):
     
     # Update project metadata
     project.calibration_status = "calibrated"
-    write_project_metadata(project)
+    write_project_metadata(projects_root, project)
     
     return {
         "success": True,
@@ -133,14 +136,15 @@ async def save_gcp_file(project_id: str, request: GCPSaveRequest):
     }
 
 @router.get("/{project_id}/status")
-async def get_calibration_status(project_id: str):
+async def get_calibration_status(request: Request, project_id: str):
     """Check if project has calibration."""
-    project = read_project_metadata(project_id)
+    projects_root = get_projects_root(request)
+    project = read_project_metadata(projects_root, project_id)
     
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    project_path = get_project_path(project_id)
+    project_path = get_project_path(projects_root, project_id)
     calibrations_dir = project_path / "calibrations"
     
     if not calibrations_dir.exists():
@@ -169,25 +173,26 @@ async def get_calibration_status(project_id: str):
 # Legacy endpoints for backward compatibility
 
 @router.post("/start")
-async def start_calibration(project_id: str):
+async def start_calibration(request: Request, project_id: str):
     """
     Simulates 15-second recording and returns 3 frame URLs.
     In production, this would connect to drone camera and record video.
     """
-    frames_dir = f"/app/calibrations/{project_id}"
-    os.makedirs(frames_dir, exist_ok=True)
+    calibration_path = request.app.state.calibration_path
+    frames_dir = calibration_path / project_id
+    frames_dir.mkdir(parents=True, exist_ok=True)
     
     frame_urls = []
     for i in range(3):
-        frame_path = f"{frames_dir}/frame_{i}.jpg"
+        frame_path = frames_dir / f"frame_{i}.jpg"
         
         # Create a simple placeholder image
         import numpy as np
         import cv2
         img = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-        cv2.imwrite(frame_path, img)
+        cv2.imwrite(str(frame_path), img)
         
-        frame_urls.append(f"/api/calibration/frames/{project_id}/frame_{i}.jpg")
+        frame_urls.append(f"/api/projects/calibration/frames/{project_id}/frame_{i}.jpg")
     
     return {
         "project_id": project_id,
@@ -197,10 +202,11 @@ async def start_calibration(project_id: str):
     }
 
 @router.get("/frames/{project_id}/{frame_name}")
-async def get_frame(project_id: str, frame_name: str):
+async def get_frame(request: Request, project_id: str, frame_name: str):
     """Serve calibration frame images."""
-    frame_path = f"/app/calibrations/{project_id}/{frame_name}"
-    if not os.path.exists(frame_path):
+    calibration_path = request.app.state.calibration_path
+    frame_path = calibration_path / project_id / frame_name
+    if not frame_path.exists():
         raise HTTPException(status_code=404, detail="Frame not found")
     
     async def file_iterator():

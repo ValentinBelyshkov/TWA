@@ -10,13 +10,14 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - uploads:/app/uploads
-      - calibrations:/app/calibrations
-      - projects:/app/projects
+      - ./data/uploads:/app/uploads
+      - ./data/calibrations:/app/calibrations
+      - ./data/projects:/app/projects
     environment:
       - DATABASE_URL=sqlite:///./odometry.db
       - VIDEO_SAVE_PATH=/app/uploads
       - CALIBRATION_PATH=/app/calibrations
+      - PROJECTS_PATH=/app/projects
       - CORS_ORIGINS=http://localhost:8080,http://localhost:3000
     env_file:
       - .env
@@ -41,11 +42,6 @@ services:
       - backend
     networks:
       - odometry-network
-
-volumes:
-  uploads:
-  calibrations:
-  projects:
 
 networks:
   odometry-network:
