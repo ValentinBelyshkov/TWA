@@ -23,30 +23,50 @@ export default function Index() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async ({ name, type, videoFile }: { name: string; type: ProjectType; videoFile?: File }): Promise<Project> => {
-      const project = await createProject(name, type);
+    mutationFn: async ({
+      name,
+      type,
+      videoFile,
+    }: {
+      name: string;
+      type: ProjectType;
+      videoFile?: File;
+    }): Promise<Project> => {
+      let project = await createProject(name, type);
       if (videoFile) {
-        await uploadProjectVideo(project.id, videoFile);
+        const uploadResult = await uploadProjectVideo(project.id, videoFile);
+        project = { ...project, videoFilename: uploadResult.filename };
       }
       return project;
     },
-    onSuccess: () => {
+    onSuccess: (newProject) => {
+      queryClient.setQueryData(["projects"], (old: Project[] = []) => [
+        newProject,
+        ...old,
+      ]);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success("Проект успешно создан");
+      toast.success("Проект успешно создан", { duration: 1000 });
     },
-    onError: (error) => {
-      toast.error(`Ошибка при создании проекта: ${error.message}`);
+    onError: (error: any) => {
+      toast.error(`Ошибка при создании проекта: ${error.message}`, {
+        duration: 1000,
+      });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteProject,
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
+      queryClient.setQueryData(["projects"], (old: Project[] = []) =>
+        old.filter((p) => p.id !== deletedId),
+      );
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success("Проект удален");
+      toast.success("Проект удален", { duration: 1000 });
     },
-    onError: (error) => {
-      toast.error(`Ошибка при удалении проекта: ${error.message}`);
+    onError: (error: any) => {
+      toast.error(`Ошибка при удалении проекта: ${error.message}`, {
+        duration: 1000,
+      });
     },
   });
 
