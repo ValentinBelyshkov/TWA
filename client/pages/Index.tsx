@@ -1,52 +1,66 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Plus, Trash2, Eye, Settings } from "lucide-react";
+import { Plus, Trash2, Eye } from "lucide-react";
 import { ProjectModal, ProjectType } from "@/components/ProjectModal";
 import { Button } from "@/components/ui/button";
-
-interface Project {
-  id: string;
-  name: string;
-  type: ProjectType;
-  createdAt: Date;
-  videoFile?: File;
-}
+import {
+  getProjects,
+  createProject,
+  deleteProject,
+  uploadProjectVideo,
+  type Project,
+} from "@/lib/api";
+import { toast } from "sonner";
 
 export default function Index() {
-  const [projects, setProjects] = useState<Project[]>([
-    {
-      id: "1",
-      name: "Испытание в поле",
-      type: "камера",
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    },
-    {
-      id: "2",
-      name: "Симуляция дома",
-      type: "симуляция",
-      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
-    },
-  ]);
+  const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleCreateProject = (
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ["projects"],
+    queryFn: getProjects,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: ({ name, type, videoFile }: { name: string; type: ProjectType; videoFile?: File }) =>
+      createProject(name, type).then((project) => {
+        if (videoFile) {
+          return uploadProjectVideo(project.id, videoFile);
+        }
+        return project;
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Проект успешно создан");
+    },
+    onError: (error) => {
+      toast.error(`Ошибка при создании проекта: ${error.message}`);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteProject,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Проект удален");
+    },
+    onError: (error) => {
+      toast.error(`Ошибка при удалении проекта: ${error.message}`);
+    },
+  });
+
+  const handleCreateProject = async (
     name: string,
     type: ProjectType,
     videoFile?: File
   ) => {
-    const newProject: Project = {
-      id: Date.now().toString(),
-      name,
-      type,
-      createdAt: new Date(),
-      videoFile,
-    };
-    setProjects([newProject, ...projects]);
+    await createMutation.mutateAsync({ name, type, videoFile });
   };
 
   const handleDeleteProject = (id: string) => {
     if (confirm("Вы уверены, что хотите удалить этот проект?")) {
-      setProjects(projects.filter((p) => p.id !== id));
+      deleteMutation.mutate(id);
     }
   };
 
@@ -88,7 +102,12 @@ export default function Index() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-12">
-        {projects.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Загрузка проектов...</p>
+          </div>
+        ) : projects.length === 0 ? (
           <div className="text-center py-20">
             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-3xl">📦</span>

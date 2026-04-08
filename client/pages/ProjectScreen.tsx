@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, Square, Settings } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { TelemetryBar } from "@/components/TelemetryBar";
 import { MapComponent } from "@/components/MapComponent";
 import {
@@ -8,11 +9,49 @@ import {
   CalibrationPoint,
 } from "@/components/CalibrationPointSelector";
 import { Button } from "@/components/ui/button";
+import { getProject, type Project } from "@/lib/api";
 
 export default function ProjectScreen() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
+
+  const { data: project, isLoading, error } = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => getProject(projectId!),
+    enabled: !!projectId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Загрузка проекта...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">❌</div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Проект не найден
+          </h2>
+          <p className="text-muted-foreground mb-6">
+            Не удалось загрузить данные проекта
+          </p>
+          <Button onClick={() => navigate("/")} className="btn-primary">
+            Вернуться к списку проектов
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const [dronePosition, setDronePosition] = useState({
     lat: 55.7558,
     lng: 37.6173,
@@ -132,9 +171,11 @@ export default function ProjectScreen() {
           </button>
           <div>
             <h1 className="text-xl font-bold text-foreground">
-              Проект #{projectId}
+              {project.name}
             </h1>
-            <p className="text-sm text-muted-foreground">Операционный экран</p>
+            <p className="text-sm text-muted-foreground">
+              {project.type === "камера" ? "Камера" : "Симуляция"}
+            </p>
           </div>
         </div>
         <button className="p-2 hover:bg-muted rounded-lg transition-colors">

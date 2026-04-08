@@ -11,6 +11,7 @@ load_dotenv()
 async def lifespan(app: FastAPI):
     os.makedirs(os.getenv("VIDEO_SAVE_PATH", "/app/uploads"), exist_ok=True)
     os.makedirs(os.getenv("CALIBRATION_PATH", "/app/calibrations"), exist_ok=True)
+    os.makedirs(os.getenv("PROJECTS_PATH", "/app/projects"), exist_ok=True)
     yield
 
 app = FastAPI(title="Visual Odometry API", lifespan=lifespan)
