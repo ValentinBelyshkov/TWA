@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
@@ -12,7 +12,9 @@ from fastapi.encoders import jsonable_encoder
 
 router = APIRouter()
 
-PROJECTS_ROOT = Path("/app/projects")
+def get_projects_root(request: Request) -> Path:
+    """Get projects root path from app state."""
+    return request.app.state.projects_path
 
 class ProjectBase(BaseModel):
     name: str
@@ -27,21 +29,21 @@ class Project(ProjectBase):
     video_filename: Optional[str] = None
     calibration_status: str = "not_calibrated"
 
-def ensure_projects_directory():
+def ensure_projects_directory(projects_root: Path):
     """Ensure the projects directory exists."""
-    PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
+    projects_root.mkdir(parents=True, exist_ok=True)
 
-def get_project_path(project_id: str) -> Path:
+def get_project_path(projects_root: Path, project_id: str) -> Path:
     """Get the path to a project directory."""
-    return PROJECTS_ROOT / project_id
+    return projects_root / project_id
 
-def get_metadata_path(project_id: str) -> Path:
+def get_metadata_path(projects_root: Path, project_id: str) -> Path:
     """Get the path to a project's metadata.json file."""
-    return get_project_path(project_id) / "metadata.json"
+    return get_project_path(projects_root, project_id) / "metadata.json"
 
-def read_project_metadata(project_id: str) -> Optional[Project]:
+def read_project_metadata(projects_root: Path, project_id: str) -> Optional[Project]:
     """Read and validate project metadata from JSON file."""
-    metadata_path = get_metadata_path(project_id)
+    metadata_path = get_metadata_path(projects_root, project_id)
     if not metadata_path.exists():
         return None
     
@@ -52,9 +54,9 @@ def read_project_metadata(project_id: str) -> Optional[Project]:
     except Exception:
         return None
 
-def write_project_metadata(project: Project) -> None:
+def write_project_metadata(projects_root: Path, project: Project) -> None:
     """Write project metadata to JSON file and create project structure."""
-    project_path = get_project_path(project.id)
+    project_path = get_project_path(projects_root, project.id)
     project_path.mkdir(parents=True, exist_ok=True)
     
     # Create subdirectories
@@ -62,27 +64,29 @@ def write_project_metadata(project: Project) -> None:
     (project_path / "calibration").mkdir(exist_ok=True)
     (project_path / "photos").mkdir(exist_ok=True)
     
-    metadata_path = get_metadata_path(project.id)
+    metadata_path = get_metadata_path(projects_root, project.id)
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(jsonable_encoder(project), f, indent=2, ensure_ascii=False)
 
 @router.get("", response_model=List[Project])
-async def get_projects():
-    ensure_projects_directory()
+async def get_projects(request: Request):
+    projects_root = get_projects_root(request)
+    ensure_projects_directory(projects_root)
     projects = []
     
-    if PROJECTS_ROOT.exists():
-        for project_dir in PROJECTS_ROOT.iterdir():
+    if projects_root.exists():
+        for project_dir in projects_root.iterdir():
             if project_dir.is_dir():
-                project = read_project_metadata(project_dir.name)
+                project = read_project_metadata(projects_root, project_dir.name)
                 if project:
                     projects.append(project)
     
     return projects
 
 @router.post("", response_model=Project)
-async def create_project(project: ProjectCreate):
-    ensure_projects_directory()
+async def create_project(request: Request, project: ProjectCreate):
+    projects_root = get_projects_root(request)
+    ensure_projects_directory(projects_root)
     
     new_project = Project(
         id=str(uuid.uuid4()),
@@ -93,12 +97,13 @@ async def create_project(project: ProjectCreate):
         calibration_status="not_calibrated"
     )
     
-    write_project_metadata(new_project)
+    write_project_metadata(projects_root, new_project)
     return new_project
 
 @router.get("/{project_id}", response_model=Project)
-async def get_project(project_id: str):
-    project = read_project_metadata(project_id)
+async def get_project(request: Request, project_id: str):
+    projects_root = get_projects_root(request)
+    project = read_project_metadata(projects_root, project_id)
     
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -106,8 +111,9 @@ async def get_project(project_id: str):
     return project
 
 @router.put("/{project_id}", response_model=Project)
-async def update_project(project_id: str, project: ProjectBase):
-    existing_project = read_project_metadata(project_id)
+async def update_project(request: Request, project_id: str, project: ProjectBase):
+    projects_root = get_projects_root(request)
+    existing_project = read_project_metadata(projects_root, project_id)
     
     if existing_project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -115,12 +121,13 @@ async def update_project(project_id: str, project: ProjectBase):
     existing_project.name = project.name
     existing_project.type = project.type
     
-    write_project_metadata(existing_project)
+    write_project_metadata(projects_root, existing_project)
     return existing_project
 
 @router.delete("/{project_id}")
-async def delete_project(project_id: str):
-    project_path = get_project_path(project_id)
+async def delete_project(request: Request, project_id: str):
+    projects_root = get_projects_root(request)
+    project_path = get_project_path(projects_root, project_id)
     
     if not project_path.exists():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -129,13 +136,14 @@ async def delete_project(project_id: str):
     return {"message": "Project deleted"}
 
 @router.post("/{project_id}/video")
-async def upload_video(project_id: str, file: UploadFile = File(...)):
-    project = read_project_metadata(project_id)
+async def upload_video(request: Request, project_id: str, file: UploadFile = File(...)):
+    projects_root = get_projects_root(request)
+    project = read_project_metadata(projects_root, project_id)
     
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    project_path = get_project_path(project_id)
+    project_path = get_project_path(projects_root, project_id)
     videos_dir = project_path / "videos"
     videos_dir.mkdir(parents=True, exist_ok=True)
     
@@ -146,6 +154,6 @@ async def upload_video(project_id: str, file: UploadFile = File(...)):
         f.write(content)
     
     project.video_filename = str(save_path)
-    write_project_metadata(project)
+    write_project_metadata(projects_root, project)
     
     return {"message": "Video uploaded", "filename": str(save_path)}
