@@ -46,16 +46,7 @@ services:
     networks:
       - odometry-network
 
-  ros:
-    image: osrf/ros:humble-ros-base
-    container_name: odometry-ros
-    command: bash -c "source /opt/ros/humble/setup.bash && ros2 run image_pub image_publisher /path/to/images"
-    volumes:
-      - ./data/images:/data/images
-    ports:
-      - "9090:9090"
-    networks:
-      - odometry-network
+
 
 networks:
   odometry-network:

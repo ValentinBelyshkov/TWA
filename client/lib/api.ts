@@ -208,3 +208,30 @@ export async function getCalibrationStatus(projectId: string): Promise<{
     calibration_file: string | null;
   }>(`/api/projects/${projectId}/calibration/status`);
 }
+
+// TerraSLAM control
+export interface CommandResponse {
+  success: boolean;
+  output: string;
+  error: string | null;
+}
+
+export async function controlTerraSLAMComponent(
+  component: string,
+  action: string,
+): Promise<CommandResponse> {
+  return request<CommandResponse>("/api/control/terraslam/component", {
+    method: "POST",
+    body: JSON.stringify({ component, action }),
+  });
+}
+
+export async function getTerraSLAMHealth(): Promise<{
+  status: string;
+  container_status: string;
+}> {
+  return request<{
+    status: string;
+    container_status: string;
+  }>("/api/control/terraslam/health");
+}
