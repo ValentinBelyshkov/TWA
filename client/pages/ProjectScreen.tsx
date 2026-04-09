@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, Square, Settings, Upload, Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,7 +9,12 @@ import {
   CalibrationPoint,
 } from "@/components/CalibrationPointSelector";
 import { Button } from "@/components/ui/button";
-import { getProject, type Project, uploadCalibrationImage, saveGCPPoints } from "@/lib/api";
+import {
+  getProject,
+  type Project,
+  uploadCalibrationImage,
+  saveGCPPoints,
+} from "@/lib/api";
 
 type CalibrationStep = "instructions" | "upload" | "pairing" | "complete";
 
@@ -18,11 +23,96 @@ export default function ProjectScreen() {
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
 
-  const { data: project, isLoading, error, refetch } = useQuery({
+  const [dronePosition, setDronePosition] = useState({
+    lat: 55.7558,
+    lng: 37.6173,
+  });
+  const [dronePath, setDronePath] = useState<
+    Array<{ lat: number; lng: number }>
+  >([]);
+  const [telemetry, setTelemetry] = useState({
+    height: 0,
+    speed: 0,
+    battery: 100,
+    status: "idle" as "idle" | "recording" | "active",
+  });
+  const [showCalibration, setShowCalibration] = useState(true);
+  const [calibrationStep, setCalibrationStep] =
+    useState<CalibrationStep>("instructions");
+  const [uploadedImage, setUploadedImage] = useState<{
+    filename: string;
+    url: string;
+  } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoCanvasRef = useRef<HTMLCanvasElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [hasVideoStream, setHasVideoStream] = useState(false);
+
+  // Connect to ROS video stream WebSocket
+  useEffect(() => {
+    if (!projectId || calibrationStep !== "complete") return;
+
+    const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:8000"}/ws/video/${projectId}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === "frame" && message.data) {
+          setHasVideoStream(true);
+          const canvas = videoCanvasRef.current;
+          if (!canvas) return;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+
+          const img = new Image();
+          img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+          };
+          img.src = `data:image/jpeg;base64,${message.data}`;
+        }
+      } catch (e) {
+        console.error("Video stream error:", e);
+      }
+    };
+
+    ws.onerror = (e) => console.error("WebSocket error:", e);
+    ws.onclose = () => console.log("Video WebSocket closed");
+
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [projectId, calibrationStep]);
+
+  const {
+    data: project,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["project", projectId],
     queryFn: () => getProject(projectId!),
     enabled: !!projectId,
   });
+
+  useEffect(() => {
+    if (project) {
+      setShowCalibration(project.calibrationStatus !== "calibrated");
+      setCalibrationStep(
+        project.calibrationStatus === "calibrated"
+          ? "complete"
+          : "instructions",
+      );
+    }
+  }, [project]);
 
   if (isLoading) {
     return (
@@ -53,34 +143,6 @@ export default function ProjectScreen() {
       </div>
     );
   }
-
-  const [dronePosition, setDronePosition] = useState({
-    lat: 55.7558,
-    lng: 37.6173,
-  });
-  const [dronePath, setDronePath] = useState<
-    Array<{ lat: number; lng: number }>
-  >([]);
-  const [telemetry, setTelemetry] = useState({
-    height: 0,
-    speed: 0,
-    battery: 100,
-    status: "idle" as "idle" | "recording" | "active",
-  });
-  
-  // Calibration workflow state
-  const [showCalibration, setShowCalibration] = useState(true);
-  const [calibrationStep, setCalibrationStep] = useState<CalibrationStep>(
-    project.calibrationStatus === "calibrated" ? "complete" : "instructions"
-  );
-  const [uploadedImage, setUploadedImage] = useState<{
-    filename: string;
-    url: string;
-  } | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleStartRecording = () => {
     setIsRecording(true);
@@ -165,7 +227,9 @@ export default function ProjectScreen() {
       });
       setCalibrationStep("pairing");
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Ошибка загрузки изображения");
+      setUploadError(
+        err instanceof Error ? err.message : "Ошибка загрузки изображения",
+      );
     } finally {
       setIsUploading(false);
     }
@@ -178,13 +242,13 @@ export default function ProjectScreen() {
       await saveGCPPoints(
         projectId,
         uploadedImage.filename,
-        points.map(p => ({
+        points.map((p) => ({
           imageX: p.imageX,
           imageY: p.imageY,
           lat: p.lat,
           lng: p.lng,
           altitude: p.altitude,
-        }))
+        })),
       );
       await refetch();
       setCalibrationStep("complete");
@@ -263,6 +327,7 @@ export default function ProjectScreen() {
           dronePath={dronePath}
           showCalibration={showCalibration}
           onCalibrate={handleCalibrate}
+          hasVideoStream={hasVideoStream}
         />
       )}
     </div>
@@ -297,9 +362,7 @@ function CalibrationWorkflow({
   projectId,
 }: CalibrationWorkflowProps) {
   if (step === "instructions") {
-    return (
-      <InstructionsStep onNext={onInstructionsNext} />
-    );
+    return <InstructionsStep onNext={onInstructionsNext} />;
   }
 
   if (step === "upload") {
@@ -522,6 +585,7 @@ interface OperationScreenProps {
   dronePath: Array<{ lat: number; lng: number }>;
   showCalibration: boolean;
   onCalibrate: () => void;
+  hasVideoStream: boolean;
 }
 
 function OperationScreen({
@@ -532,17 +596,28 @@ function OperationScreen({
   dronePath,
   showCalibration,
   onCalibrate,
+  hasVideoStream,
 }: OperationScreenProps) {
+  const videoCanvasRef = useRef<HTMLCanvasElement>(null);
+
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 lg:p-6 bg-gradient-to-br from-slate-50 to-blue-50 overflow-auto">
       {/* Left side - Camera Feed */}
       <div className="flex-1 flex flex-col gap-4">
         <div className="flex-1 bg-black rounded-lg border-2 border-border flex items-center justify-center relative overflow-hidden min-h-[300px] lg:min-h-0">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <span className="text-6xl mb-4 block">📷</span>
-              <p className="text-white/60 text-sm">Видеопоток с камеры дрона</p>
+          {hasVideoStream ? (
+            <canvas
+              ref={videoCanvasRef}
+              className="absolute inset-0 w-full h-full object-contain"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <span className="text-6xl mb-4 block">📷</span>
+                <p className="text-white/60 text-sm">Видеопоток с камеры дрона</p>
+              </div>
             </div>
+          )}
           </div>
 
           {isRecording && (

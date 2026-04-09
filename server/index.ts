@@ -4,6 +4,9 @@ import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import path from "path";
 import fs from "fs";
+import { createProxyMiddleware } from "http-proxy-middleware";
+
+const FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8000";
 
 export function createServer() {
   const app = express();
@@ -12,6 +15,18 @@ export function createServer() {
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  // Proxy to FastAPI backend
+  app.use(
+    "/api",
+    createProxyMiddleware({
+      target: FASTAPI_URL,
+      changeOrigin: true,
+      pathRewrite: {
+        "^/api": "/api",
+      },
+    }),
+  );
 
   // Example API routes
   app.get("/api/ping", (_req, res) => {

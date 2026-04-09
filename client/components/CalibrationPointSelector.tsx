@@ -36,11 +36,15 @@ export function CalibrationPointSelector({
   projectId,
   imageFilename,
 }: CalibrationPointSelectorProps) {
-  const [completedPoints, setCompletedPoints] = useState<CalibrationPoint[]>([]);
+  const [completedPoints, setCompletedPoints] = useState<CalibrationPoint[]>(
+    [],
+  );
   const [pendingPoint, setPendingPoint] = useState<PendingPoint | null>(null);
   const [currentMode, setCurrentMode] = useState<"image" | "map" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isImageHovered, setIsImageHovered] = useState(false);
+  const [isMapHovered, setIsMapHovered] = useState(false);
 
   const REQUIRED_POINTS = 5;
   const pointNumber = completedPoints.length + 1;
@@ -56,19 +60,22 @@ export function CalibrationPointSelector({
   };
 
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!pendingPoint || currentMode !== "image") return;
+    if (completedPoints.length >= REQUIRED_POINTS) return;
+
+    // If we already have image coordinates and are waiting for map, don't allow new image clicks
+    if (pendingPoint?.imageX && currentMode === "map") return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    setPendingPoint((prev) => {
-      if (!prev) return null;
-      return { ...prev, imageX: x, imageY: y };
-    });
-
-    // Switch to map mode
+    // Start a new point with image coordinates and set mode to map
     setCurrentMode("map");
+    setPendingPoint({
+      id: `point-${Date.now()}`,
+      imageX: x,
+      imageY: y,
+    });
   };
 
   const handleMapPoint = (lat: number, lng: number) => {
@@ -80,8 +87,18 @@ export function CalibrationPointSelector({
     });
   };
 
+  const handleMapClick = (lat: number, lng: number) => {
+    handleMapPoint(lat, lng);
+  };
+
   const completePoint = (altitude: number = 0) => {
-    if (!pendingPoint || !pendingPoint.imageX || !pendingPoint.imageY || !pendingPoint.lat || !pendingPoint.lng) {
+    if (
+      !pendingPoint ||
+      !pendingPoint.imageX ||
+      !pendingPoint.imageY ||
+      !pendingPoint.lat ||
+      !pendingPoint.lng
+    ) {
       alert("Требуются координаты на обеих сторонах");
       return;
     }
@@ -121,7 +138,7 @@ export function CalibrationPointSelector({
       setSaveError(null);
 
       try {
-        const points: CalibrationPointRequest[] = completedPoints.map(p => ({
+        const points: CalibrationPointRequest[] = completedPoints.map((p) => ({
           imageX: p.imageX,
           imageY: p.imageY,
           lat: p.lat,
@@ -142,7 +159,7 @@ export function CalibrationPointSelector({
       const element = document.createElement("a");
       element.setAttribute(
         "href",
-        "data:text/plain;charset=utf-8," + encodeURIComponent(gpcContent)
+        "data:text/plain;charset=utf-8," + encodeURIComponent(gpcContent),
       );
       element.setAttribute("download", "calibration.gpc");
       element.style.display = "none";
@@ -154,7 +171,9 @@ export function CalibrationPointSelector({
     }
   };
 
-  const generateGPCContent = (calibrationPoints: CalibrationPoint[]): string => {
+  const generateGPCContent = (
+    calibrationPoints: CalibrationPoint[],
+  ): string => {
     let content = "+proj=utm +zone=37 +datum=WGS84\n";
     content += "image.jpg\n";
     content += `${calibrationPoints.length}\n`;
@@ -210,16 +229,18 @@ export function CalibrationPointSelector({
 
             <div
               onClick={handleImageClick}
-              className={`relative flex-1 rounded-lg overflow-hidden border-2 transition-all min-h-[300px] ${
+              onMouseEnter={() => setIsImageHovered(true)}
+              onMouseLeave={() => setIsImageHovered(false)}
+              className={`relative flex-1 rounded-lg overflow-hidden border-2 transition-all min-h-[300px] cursor-pointer hover:border-primary/50 ${
                 currentMode === "image"
                   ? "border-primary cursor-crosshair bg-blue-50"
-                  : "border-border bg-gray-100 cursor-default"
+                  : "border-border bg-gray-100"
               }`}
             >
               <img
                 src={imageUrl}
                 alt="Calibration"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-contain pointer-events-none"
               />
 
               {/* Completed points on image */}
@@ -256,28 +277,6 @@ export function CalibrationPointSelector({
                   </span>
                 </div>
               )}
-
-              {/* Instructions */}
-              {currentMode === "image" && !pendingPoint?.imageX && (
-                <div className="absolute inset-0 flex items-center justify-center bg-primary/20 backdrop-blur-sm">
-                  <div className="text-center text-white">
-                    <p className="text-lg font-semibold mb-2">
-                      Нажмите на изображение
-                    </p>
-                    <p className="text-sm">Для установки точки {pointNumber}</p>
-                  </div>
-                </div>
-              )}
-
-              {currentMode !== "image" && completedPoints.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-                  <div className="text-center text-white">
-                    <p className="text-lg font-semibold">
-                      Нажмите "На изображении" чтобы начать
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Completed points list */}
@@ -293,12 +292,16 @@ export function CalibrationPointSelector({
                       className="p-2 rounded-lg bg-green-50 border border-green-200 flex justify-between items-center"
                     >
                       <div className="text-xs">
-                        <p className="font-bold text-green-900">Точка {idx + 1}</p>
+                        <p className="font-bold text-green-900">
+                          Точка {idx + 1}
+                        </p>
                         <p className="text-green-700">
-                          Пиксели: ({point.imageX.toFixed(0)}, {point.imageY.toFixed(0)})
+                          Пиксели: ({point.imageX.toFixed(0)},{" "}
+                          {point.imageY.toFixed(0)})
                         </p>
                         <p className="text-green-600">
-                          Координаты: ({point.lat.toFixed(4)}, {point.lng.toFixed(4)})
+                          Координаты: ({point.lat.toFixed(4)},{" "}
+                          {point.lng.toFixed(4)})
                         </p>
                       </div>
                       <button
@@ -333,30 +336,29 @@ export function CalibrationPointSelector({
             </div>
 
             <div
-              className={`flex-1 rounded-lg overflow-hidden border-2 transition-all min-h-[300px] ${
+              onMouseEnter={() => setIsMapHovered(true)}
+              onMouseLeave={() => setIsMapHovered(false)}
+              className={`relative flex-1 rounded-lg overflow-hidden border-2 transition-all min-h-[300px] ${
                 currentMode === "map" ? "border-primary" : "border-border"
               }`}
             >
-              {currentMode === "map" && pendingPoint ? (
-                <MapClickableComponent
-                  onPointSelect={(lat, lng) => {
-                    handleMapPoint(lat, lng);
-                  }}
-                  selectedPoint={
-                    pendingPoint.lat && pendingPoint.lng
-                      ? { lat: pendingPoint.lat, lng: pendingPoint.lng }
-                      : undefined
-                  }
-                />
-              ) : (
-                <MapComponent
-                  dronePosition={{ lat: 55.7558, lng: 37.6173 }}
-                  path={completedPoints.map((p) => ({
-                    lat: p.lat,
-                    lng: p.lng,
-                  }))}
-                />
-              )}
+              <MapComponent
+                dronePosition={{ lat: 55.7558, lng: 37.6173 }}
+                path={completedPoints.map((p) => ({
+                  lat: p.lat,
+                  lng: p.lng,
+                }))}
+                onMapClick={
+                  currentMode === "map" && pendingPoint
+                    ? handleMapClick
+                    : undefined
+                }
+                selectedPoint={
+                  pendingPoint?.lat && pendingPoint?.lng
+                    ? { lat: pendingPoint.lat, lng: pendingPoint.lng }
+                    : undefined
+                }
+              />
             </div>
 
             {/* Point editor for pending point */}
@@ -407,7 +409,7 @@ export function CalibrationPointSelector({
                   <button
                     onClick={() => {
                       const altitudeInput = document.getElementById(
-                        "altitude-input"
+                        "altitude-input",
                       ) as HTMLInputElement;
                       const altitude = altitudeInput
                         ? parseFloat(altitudeInput.value)
@@ -468,47 +470,6 @@ export function CalibrationPointSelector({
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-interface MapClickableComponentProps {
-  onPointSelect: (lat: number, lng: number) => void;
-  selectedPoint?: { lat: number; lng: number };
-}
-
-function MapClickableComponent({
-  onPointSelect,
-  selectedPoint,
-}: MapClickableComponentProps) {
-  const mapRef = useRef<HTMLDivElement | null>(null);
-
-  return (
-    <div
-      ref={mapRef}
-      className="w-full h-full flex items-center justify-center relative bg-blue-50"
-      onClick={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top) / rect.height;
-
-        // Convert to approximate lat/lng
-        const lat = 55.7558 + (y - 0.5) * 0.02;
-        const lng = 37.6173 + (x - 0.5) * 0.02;
-
-        onPointSelect(lat, lng);
-      }}
-    >
-      <div className="text-center pointer-events-none">
-        <p className="text-primary font-bold mb-2">Нажмите на карту</p>
-        <p className="text-sm text-muted-foreground">
-          Для установки координат точки
-        </p>
-      </div>
-
-      {selectedPoint && (
-        <div className="absolute w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
-      )}
     </div>
   );
 }

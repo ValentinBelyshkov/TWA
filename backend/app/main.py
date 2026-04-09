@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from app.routers import projects, calibration, telemetry, control
+from app.routers import projects, calibration, telemetry, control, video
 from pathlib import Path
 
 load_dotenv()
@@ -59,6 +59,7 @@ app.include_router(calibration.router, prefix="/api/projects", tags=["calibratio
 # Standalone telemetry and control routers
 app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"])
 app.include_router(control.router, prefix="/api/control", tags=["control"])
+app.include_router(video.router, prefix="/api/video", tags=["video"])
 
 @app.get("/health")
 async def health_check():

@@ -1,3 +1,9 @@
+# Kilo CLI
+.kilo/
+
+# Temp files
+nul
+
 # Logs
 logs
 *.log
@@ -34,7 +40,6 @@ __pycache__/
 *.so
 .Python
 *.egg-info/
-dist/
 build/
 *.egg
 venv/
@@ -59,3 +64,9 @@ projects/
 
 # Backend data directory
 backend/data/
+
+# Netlify
+netlify/
+
+# Server
+server/node_modules/

@@ -31,10 +31,10 @@ function fromBackendProject(backend: ProjectBackend): Project {
   };
 }
 
-function toBackendCreate(project: {
+function toBackendCreate(project: { name: string; type: ProjectType }): {
   name: string;
-  type: ProjectType;
-}): { name: string; type: string } {
+  type: string;
+} {
   return {
     name: project.name,
     type: project.type,
@@ -43,10 +43,14 @@ function toBackendCreate(project: {
 
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
-  
+  let baseUrl = API_BASE_URL;
+  if (baseUrl.startsWith("/") && endpoint.startsWith("/api")) {
+    endpoint = endpoint.replace(/^\/api/, "");
+  }
+  const url = `${baseUrl}${endpoint}`;
+
   const response = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
@@ -75,7 +79,7 @@ export async function getProject(projectId: string): Promise<Project> {
 
 export async function createProject(
   name: string,
-  type: ProjectType
+  type: ProjectType,
 ): Promise<Project> {
   const data = await request<ProjectBackend>("/api/projects", {
     method: "POST",
@@ -87,7 +91,7 @@ export async function createProject(
 export async function updateProject(
   projectId: string,
   name: string,
-  type: ProjectType
+  type: ProjectType,
 ): Promise<Project> {
   const data = await request<ProjectBackend>(`/api/projects/${projectId}`, {
     method: "PUT",
@@ -104,7 +108,7 @@ export async function deleteProject(projectId: string): Promise<void> {
 
 export async function uploadProjectVideo(
   projectId: string,
-  file: File
+  file: File,
 ): Promise<{ message: string; filename: string }> {
   const formData = new FormData();
   formData.append("file", file);
@@ -114,7 +118,7 @@ export async function uploadProjectVideo(
     {
       method: "POST",
       body: formData,
-    }
+    },
   );
 
   if (!response.ok) {
@@ -137,18 +141,20 @@ export interface CalibrationPointRequest {
 
 export async function uploadCalibrationImage(
   projectId: string,
-  file: File
+  file: File,
 ): Promise<{ success: boolean; image_filename: string; image_url: string }> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/projects/${projectId}/calibration/upload-image`,
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
+  let url = `${API_BASE_URL}/api/projects/${projectId}/upload-image`;
+  if (url.startsWith("/")) {
+    url = url.replace(/^\/api/, "");
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    body: formData,
+  });
 
   if (!response.ok) {
     const error = await response.text();
@@ -161,21 +167,27 @@ export async function uploadCalibrationImage(
 export async function saveGCPPoints(
   projectId: string,
   imageFilename: string,
-  points: CalibrationPointRequest[]
-): Promise<{ success: boolean; gcp_filename: string; calibration_status: string }> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/projects/${projectId}/calibration/save-gcp`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        image_filename: imageFilename,
-        points: points,
-      }),
-    }
-  );
+  points: CalibrationPointRequest[],
+): Promise<{
+  success: boolean;
+  gcp_filename: string;
+  calibration_status: string;
+}> {
+  let url = `${API_BASE_URL}/api/projects/${projectId}/save-gcp`;
+  if (url.startsWith("/")) {
+    url = url.replace(/^\/api/, "");
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      image_filename: imageFilename,
+      points: points,
+    }),
+  });
 
   if (!response.ok) {
     const error = await response.text();
@@ -185,10 +197,14 @@ export async function saveGCPPoints(
   return response.json();
 }
 
-export async function getCalibrationStatus(
-  projectId: string
-): Promise<{ project_id: string; calibrated: boolean; calibration_file: string | null }> {
-  return request<{ project_id: string; calibrated: boolean; calibration_file: string | null }>(
-    `/api/projects/${projectId}/calibration/status`
-  );
+export async function getCalibrationStatus(projectId: string): Promise<{
+  project_id: string;
+  calibrated: boolean;
+  calibration_file: string | null;
+}> {
+  return request<{
+    project_id: string;
+    calibrated: boolean;
+    calibration_file: string | null;
+  }>(`/api/projects/${projectId}/calibration/status`);
 }

@@ -7,6 +7,8 @@ interface MapComponentProps {
     lng: number;
   };
   path?: Array<{ lat: number; lng: number }>;
+  onMapClick?: (lat: number, lng: number) => void;
+  selectedPoint?: { lat: number; lng: number };
 }
 
 // Fix for default marker icons in Leaflet - moved inside component to avoid SSR issues
@@ -33,21 +35,29 @@ const fixLeafletIcons = () => {
 export function MapComponent({
   dronePosition = { lat: 55.7558, lng: 37.6173 }, // Default: Moscow
   path = [],
+  onMapClick,
+  selectedPoint,
 }: MapComponentProps) {
+  const mapId = useRef(`map-${Math.random().toString(36).substr(2, 9)}`);
   const mapRef = useRef<L.Map | null>(null);
   const droneMarkerRef = useRef<L.Marker | null>(null);
   const pathPolylineRef = useRef<L.Polyline | null>(null);
+  const selectedPointMarkerRef = useRef<L.Marker | null>(null);
 
   useEffect(() => {
     // Apply Leaflet icon fix
     fixLeafletIcons();
-    
+
     // Load Leaflet CSS dynamically
-    if (typeof document !== "undefined" && !document.getElementById("leaflet-css")) {
+    if (
+      typeof document !== "undefined" &&
+      !document.getElementById("leaflet-css")
+    ) {
       const link = document.createElement("link");
       link.id = "leaflet-css";
       link.rel = "stylesheet";
-      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+      link.href =
+        "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
       document.head.appendChild(link);
     }
   }, []);
@@ -56,7 +66,10 @@ export function MapComponent({
     if (mapRef.current) return;
 
     // Initialize map
-    const map = L.map("map").setView([dronePosition.lat, dronePosition.lng], 17);
+    const map = L.map("map").setView(
+      [dronePosition.lat, dronePosition.lng],
+      17,
+    );
 
     // Add OpenStreetMap tile layer
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -101,7 +114,29 @@ export function MapComponent({
       const group = new L.FeatureGroup([droneMarker, polyline]);
       map.fitBounds(group.getBounds(), { padding: [50, 50] });
     }
+
+    // Add click handler if onMapClick is provided
+    if (onMapClick) {
+      map.on("click", (e: L.LeafletMouseEvent) => {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      });
+    }
   }, []);
+
+  // Handle onMapClick changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Remove existing click handler
+    mapRef.current.off("click");
+
+    // Add new click handler if provided
+    if (onMapClick) {
+      mapRef.current.on("click", (e: L.LeafletMouseEvent) => {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      });
+    }
+  }, [onMapClick]);
 
   // Update drone position
   useEffect(() => {
@@ -129,6 +164,35 @@ export function MapComponent({
       pathPolylineRef.current = polyline;
     }
   }, [path]);
+
+  // Update selected point marker
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    if (selectedPoint) {
+      if (selectedPointMarkerRef.current) {
+        selectedPointMarkerRef.current.setLatLng([
+          selectedPoint.lat,
+          selectedPoint.lng,
+        ]);
+      } else {
+        const marker = L.marker([selectedPoint.lat, selectedPoint.lng], {
+          icon: L.divIcon({
+            className: "custom-selected-marker",
+            html: '<div class="w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse"></div>',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+          }),
+        }).addTo(mapRef.current);
+        selectedPointMarkerRef.current = marker;
+      }
+    } else {
+      if (selectedPointMarkerRef.current) {
+        mapRef.current.removeLayer(selectedPointMarkerRef.current);
+        selectedPointMarkerRef.current = null;
+      }
+    }
+  }, [selectedPoint]);
 
   return (
     <div

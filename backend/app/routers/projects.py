@@ -61,7 +61,7 @@ def write_project_metadata(projects_root: Path, project: Project) -> None:
     
     # Create subdirectories
     (project_path / "logs").mkdir(exist_ok=True)
-    (project_path / "calibration").mkdir(exist_ok=True)
+    (project_path / "calibrations").mkdir(exist_ok=True)
     (project_path / "photos").mkdir(exist_ok=True)
     
     metadata_path = get_metadata_path(projects_root, project.id)

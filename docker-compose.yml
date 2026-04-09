@@ -19,6 +19,8 @@ services:
       - CALIBRATION_PATH=/app/calibrations
       - PROJECTS_PATH=/app/projects
       - CORS_ORIGINS=http://localhost:8080,http://localhost:3000
+      - ROSBRIDGE_HOST=ros
+      - ROSBRIDGE_PORT=9090
     env_file:
       - .env
     networks:
@@ -28,6 +30,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api
     container_name: odometry-frontend
     ports:
       - "3000:80"
@@ -35,11 +39,21 @@ services:
       - ./client:/app/client
       - ./shared:/app/shared
     environment:
-      - VITE_API_URL=http://localhost:8000
-      - VITE_WS_URL=ws://localhost:8000
+      - VITE_WS_URL=ws://backend:8000
       - VITE_PUBLIC_BUILDER_KEY=${VITE_PUBLIC_BUILDER_KEY}
     depends_on:
       - backend
+    networks:
+      - odometry-network
+
+  ros:
+    image: osrf/ros:humble-ros-base
+    container_name: odometry-ros
+    command: bash -c "source /opt/ros/humble/setup.bash && ros2 run image_pub image_publisher /path/to/images"
+    volumes:
+      - ./data/images:/data/images
+    ports:
+      - "9090:9090"
     networks:
       - odometry-network
 
