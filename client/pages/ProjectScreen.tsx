@@ -614,11 +614,12 @@ function OperationScreen({
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
                 <span className="text-6xl mb-4 block">📷</span>
-                <p className="text-white/60 text-sm">Видеопоток с камеры дрона</p>
+                <p className="text-white/60 text-sm">
+                  Видеопоток с камеры дрона
+                </p>
               </div>
             </div>
           )}
-          </div>
 
           {isRecording && (
             <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-500 text-white px-3 py-1 rounded-full animate-pulse">
