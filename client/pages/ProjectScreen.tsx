@@ -26,6 +26,7 @@ export default function ProjectScreen() {
     uploadError,
     isUploading,
     hasVideoStream,
+    videoCanvasRef,
     startRecording,
     stopRecording,
     handleCalibrate,
@@ -97,6 +98,7 @@ export default function ProjectScreen() {
           showCalibration={showCalibration}
           onCalibrate={handleCalibrate}
           hasVideoStream={hasVideoStream}
+          videoCanvasRef={videoCanvasRef} 
         />
       )}
     </div>

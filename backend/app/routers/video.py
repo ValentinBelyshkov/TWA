@@ -1,9 +1,10 @@
 import asyncio
 import json
 import os
-import base64
+import base64  # Add this import
+import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Set
+from typing import Set, Union
 
 router = APIRouter()
 
@@ -13,94 +14,122 @@ class VideoStreamManager:
         self.current_frame: str = ""
     
     async def connect(self, websocket: WebSocket):
-        await websocket.accept()
         self.active_connections.add(websocket)
+        print(f"Client connected. Total: {len(self.active_connections)}")
         if self.current_frame:
-            await websocket.send_text(json.dumps({"type": "frame", "data": self.current_frame}))
+            try:
+                await websocket.send_text(json.dumps({"type": "frame", "data": self.current_frame}))
+            except:
+                pass
     
     def disconnect(self, websocket: WebSocket):
         self.active_connections.discard(websocket)
+        print(f"Client disconnected. Total: {len(self.active_connections)}")
     
     async def broadcast(self, frame_data: str):
         self.current_frame = frame_data
         message = json.dumps({"type": "frame", "data": frame_data})
+        disconnected = []
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
-            except:
-                pass
+            except Exception as e:
+                print(f"Send error: {e}")
+                disconnected.append(connection)
+        
+        for conn in disconnected:
+            self.active_connections.discard(conn)
 
 video_stream_manager = VideoStreamManager()
 
 ROSBRIDGE_HOST = os.getenv("ROSBRIDGE_HOST", "localhost")
-ROSBRIDGE_PORT = int(os.getenv("ROSBRIDGE_PORT", 9090))
+ROSBRIDGE_PORT = int(os.getenv("ROSBRIDGE_PORT", 9091))
 
 async def connect_to_rosbridge():
     """Connect to rosbridge WebSocket and subscribe to /camera/image_raw."""
+    ws_url = f"ws://{ROSBRIDGE_HOST}:{ROSBRIDGE_PORT}"
+    
     while True:
         try:
-            ws_url = f"ws://{ROSBRIDGE_HOST}:{ROSBRIDGE_PORT}"
-            reader, writer = await asyncio.open_connection(
-                ROSBRIDGE_HOST, ROSBRIDGE_PORT
-            )
-            print(f"Connected to rosbridge at {ws_url}")
-            
-            subscribe_msg = json.dumps({
-                "op": "subscribe",
-                "topic": "/camera/image_raw",
-                "type": "sensor_msgs/msg/Image"
-            })
-            writer.write(subscribe_msg.encode() + b'\n')
-            await writer.drain()
-            
-            buffer = b""
-            while True:
-                data = await reader.read(4096)
-                if not data:
-                    break
-                buffer += data
+            print(f"Connecting to rosbridge at {ws_url}...")
+            async with websockets.connect(ws_url, max_size=10_000_000) as websocket:
+                print(f"Connected to rosbridge!")
                 
-                while b'\n' in buffer:
-                    line, buffer = buffer.split(b'\n', 1)
+                subscribe_msg = {
+                    "op": "subscribe",
+                    "topic": "/camera/image_raw",
+                    "type": "sensor_msgs/msg/Image",
+                    "queue_length": 1
+                }
+                await websocket.send(json.dumps(subscribe_msg))
+                print(f"Subscription sent")
+                
+                async for message in websocket:
                     try:
-                        msg = json.loads(line.decode('utf-8'))
+                        msg = json.loads(message)
+                        
+                        if msg.get("op") == "fragment":
+                            print(f"Fragment received (skipping)")
+                            continue
+                        
                         if msg.get("topic") == "/camera/image_raw" and "msg" in msg:
-                            msg_data = msg["msg"].get("data")
-                            if msg_data:
-                                await video_stream_manager.broadcast(msg_data)
-                    except (json.JSONDecodeError, KeyError):
+                            img_data = msg["msg"].get("data")
+                            encoding = msg["msg"].get("encoding", "unknown")
+                            width = msg["msg"].get("width", 0)
+                            height = msg["msg"].get("height", 0)
+                            
+                            if img_data:
+                                print(f"Received image: {width}x{height} {encoding}")
+                                
+                                # Convert to base64 if needed
+                                if isinstance(img_data, list):
+                                    # ROS sends data as array of ints
+                                    img_bytes = bytes(img_data)
+                                    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+                                    print(f"Converted {len(img_data)} bytes to base64 ({len(img_b64)} chars)")
+                                    await video_stream_manager.broadcast(img_b64)
+                                elif isinstance(img_data, str):
+                                    # Already base64 string
+                                    await video_stream_manager.broadcast(img_data)
+                                else:
+                                    print(f"Unknown data type: {type(img_data)}")
+                            else:
+                                print("No image data")
+                                
+                    except Exception as e:
+                        print(f"Message processing error: {e}")
+                        import traceback
+                        traceback.print_exc()
                         continue
                         
         except Exception as e:
-            print(f"Rosbridge connection error: {e}")
-            await asyncio.sleep(1)
+            print(f"Rosbridge error: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        await asyncio.sleep(3)
 
 video_task = None
 
-@router.websocket("/ws/video/{project_id}")
+@router.websocket("/ws/{project_id}")
 async def video_websocket(websocket: WebSocket, project_id: str):
-    """
-    WebSocket endpoint for video stream from ROS /camera/image_raw topic via rosbridge.
-    """
     global video_task
     
-    await video_stream_manager.connect(websocket)
-    
-    if video_task is None or video_task.done():
-        video_task = asyncio.create_task(connect_to_rosbridge())
+    await websocket.accept()
+    print(f"WebSocket accepted for project {project_id}")
     
     try:
+        await video_stream_manager.connect(websocket)
+        
+        if video_task is None or video_task.done():
+            video_task = asyncio.create_task(connect_to_rosbridge())
+        
         while True:
-            await websocket.receive_text()
+            data = await websocket.receive_text()
+            
     except WebSocketDisconnect:
+        print(f"Client disconnected from project {project_id}")
         video_stream_manager.disconnect(websocket)
-
-@router.post("/start")
-async def start_video_stream(project_id: str):
-    """Start video stream for a project."""
-    return {"status": "started", "project_id": project_id}
-
-@router.post("/stop")
-async def stop_video_stream(project_id: str):
-    """Stop video stream for a project."""
-    return {"status": "stopped", "project_id": project_id}
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        video_stream_manager.disconnect(websocket)

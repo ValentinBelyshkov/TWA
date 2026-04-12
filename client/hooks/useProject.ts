@@ -25,6 +25,15 @@ export interface DronePosition {
 
 export interface DronePath extends Array<DronePosition> {}
 
+// NEW: GPS Status interface
+export interface GPSStatus {
+  hasSignal: boolean;
+  lastUpdate: number | null;
+  lat: number | null;
+  lon: number | null;
+  alt: number | null;
+}
+
 export function useProject(projectId: string | undefined) {
   const [isRecording, setIsRecording] = useState(false);
   const [dronePosition, setDronePosition] = useState<DronePosition>({
@@ -47,9 +56,20 @@ export function useProject(projectId: string | undefined) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [hasVideoStream, setHasVideoStream] = useState(false);
+  
+  // NEW: GPS Status with timeout
+  const [gpsStatus, setGpsStatus] = useState<GPSStatus>({
+    hasSignal: false,
+    lastUpdate: null,
+    lat: null,
+    lon: null,
+    alt: null,
+  });
 
   const videoCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const gpsWsRef = useRef<WebSocket | null>(null);
+  const gpsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {
@@ -72,17 +92,21 @@ export function useProject(projectId: string | undefined) {
     }
   }, [project]);
 
+  // Video WebSocket (existing)
   useEffect(() => {
     if (!projectId || calibrationStep !== "complete") return;
 
-    const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:8000"}/ws/video/${projectId}`;
+    const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:8000"}/api/video/ws/${projectId}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    ws.onopen = () => console.log("✅ Video WebSocket connected");
+    
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
         if (message.type === "frame" && message.data) {
+        // Inside ws.onmessage, after parsing:
           setHasVideoStream(true);
           const canvas = videoCanvasRef.current;
           if (!canvas) return;
@@ -90,20 +114,36 @@ export function useProject(projectId: string | undefined) {
           const ctx = canvas.getContext("2d");
           if (!ctx) return;
 
-          const img = new Image();
-          img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-          };
-          img.src = `data:image/jpeg;base64,${message.data}`;
+          // Decode base64 to binary (BGR format from ROS)
+          const binaryString = atob(message.data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          const width = 1280;
+          const height = 720;
+          canvas.width = width;
+          canvas.height = height;
+          
+          const imgData = ctx.createImageData(width, height);
+          
+          // Convert BGR to RGBA
+          for (let i = 0, j = 0; i < bytes.length; i += 3, j += 4) {
+            imgData.data[j] = bytes[i + 2];     // R from B
+            imgData.data[j + 1] = bytes[i + 1]; // G
+            imgData.data[j + 2] = bytes[i];     // B from R
+            imgData.data[j + 3] = 255;          // Alpha
+          }
+          
+          ctx.putImageData(imgData, 0, 0);
         }
       } catch (e) {
         console.error("Video stream error:", e);
       }
     };
 
-    ws.onerror = (e) => console.error("WebSocket error:", e);
+    ws.onerror = (e) => console.error("Video WebSocket error:", e);
     ws.onclose = () => console.log("Video WebSocket closed");
 
     return () => {
@@ -111,6 +151,91 @@ export function useProject(projectId: string | undefined) {
       wsRef.current = null;
     };
   }, [projectId, calibrationStep]);
+
+  // NEW: GPS WebSocket with 1-second timeout
+  useEffect(() => {
+    if (!projectId || calibrationStep !== "complete") return;
+
+    const connectGPS = () => {
+      // Connect directly to rosbridge (not through backend)
+      const gpsUrl = `ws://${import.meta.env.VITE_ROSBRIDGE_HOST || "localhost"}:${import.meta.env.VITE_ROSBRIDGE_PORT || "9091"}`;
+      
+      console.log("Connecting to GPS WebSocket:", gpsUrl);
+      const ws = new WebSocket(gpsUrl);
+      gpsWsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("✅ GPS WebSocket connected");
+        // Subscribe to GPS topic
+        const subscribeMsg = {
+          op: "subscribe",
+          topic: "/camera/gps",
+          type: "sensor_msgs/msg/NavSatFix",
+          queue_length: 1,
+        };
+        ws.send(JSON.stringify(subscribeMsg));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.topic === "/camera/gps" && msg.msg) {
+            const { latitude, longitude, altitude } = msg.msg;
+            
+            // Clear existing timeout
+            if (gpsTimeoutRef.current) {
+              clearTimeout(gpsTimeoutRef.current);
+            }
+
+            // Update GPS status
+            setGpsStatus({
+              hasSignal: true,
+              lastUpdate: Date.now(),
+              lat: latitude,
+              lon: longitude,
+              alt: altitude,
+            });
+
+            // Update drone position on map
+            setDronePosition({ lat: latitude, lng: longitude });
+            
+            // Add to path if recording
+            if (isRecording) {
+              setDronePath((prev) => [...prev, { lat: latitude, lng: longitude }]);
+            }
+
+            // Set timeout for signal loss (1 second)
+            gpsTimeoutRef.current = setTimeout(() => {
+              setGpsStatus((prev) => ({ ...prev, hasSignal: false }));
+            }, 1000);
+          }
+        } catch (e) {
+          console.error("GPS message error:", e);
+        }
+      };
+
+      ws.onerror = (e) => {
+        console.error("GPS WebSocket error:", e);
+        setTimeout(connectGPS, 3000);
+      };
+
+      ws.onclose = () => {
+        console.log("GPS WebSocket closed, retrying...");
+        setGpsStatus((prev) => ({ ...prev, hasSignal: false }));
+        setTimeout(connectGPS, 3000);
+      };
+    };
+
+    connectGPS();
+
+    return () => {
+      if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
+      if (gpsWsRef.current) {
+        gpsWsRef.current.close();
+        gpsWsRef.current = null;
+      }
+    };
+  }, [projectId, calibrationStep, isRecording]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -121,30 +246,12 @@ export function useProject(projectId: string | undefined) {
 
     setIsRecording(true);
     setTelemetry((prev) => ({ ...prev, status: "recording" }));
-    setDronePath([{ lat: dronePosition.lat, lng: dronePosition.lng }]);
-
-    let elapsed = 0;
-    recordingIntervalRef.current = setInterval(() => {
-      elapsed += 0.5;
-
-      if (elapsed <= 15) {
-        const newLat = dronePosition.lat + (Math.random() - 0.5) * 0.0002;
-        const newLng = dronePosition.lng + (Math.random() - 0.5) * 0.0002;
-
-        setDronePosition({ lat: newLat, lng: newLng });
-        setDronePath((prev) => [...prev, { lat: newLat, lng: newLng }]);
-
-        setTelemetry((prev) => ({
-          ...prev,
-          height: Math.round(elapsed * 10) / 10,
-          speed: 1 + Math.random() * 0.5,
-          battery: Math.max(0, 100 - elapsed * 2),
-        }));
-      } else {
-        stopRecording();
-      }
-    }, 300);
-  }, [dronePosition]);
+    
+    // Start path from current GPS position if available
+    if (gpsStatus.lat && gpsStatus.lon) {
+      setDronePath([{ lat: gpsStatus.lat, lng: gpsStatus.lon }]);
+    }
+  }, [gpsStatus]);
 
   const stopRecording = useCallback(async () => {
     if (recordingIntervalRef.current) {
@@ -261,5 +368,6 @@ export function useProject(projectId: string | undefined) {
     handleCalibrationCancel,
     clearUploadError,
     refetch,
+    gpsStatus, // NEW: Export GPS status
   };
 }

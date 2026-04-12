@@ -8,7 +8,10 @@ services:
     container_name: odometry-backend
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro 
       - ./backend:/app
       - ./data/uploads:/app/uploads
       - ./data/calibrations:/app/calibrations
@@ -19,19 +22,27 @@ services:
       - CALIBRATION_PATH=/app/calibrations
       - PROJECTS_PATH=/app/projects
       - CORS_ORIGINS=http://localhost:8080,http://localhost:3000
-      - ROSBRIDGE_HOST=ros
-      - ROSBRIDGE_PORT=9090
+      - ROSBRIDGE_HOST=host.docker.internal
+      - ROSBRIDGE_PORT=9091
     env_file:
       - .env
     networks:
-      - odometry-network
+      - webadmin_net
+    
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=/api
+        - VITE_API_URL=http://localhost:8000
     container_name: odometry-frontend
     ports:
       - "3000:80"
@@ -39,15 +50,15 @@ services:
       - ./client:/app/client
       - ./shared:/app/shared
     environment:
-      - VITE_WS_URL=ws://backend:8000
+      - VITE_WS_URL=ws://localhost:8000
       - VITE_PUBLIC_BUILDER_KEY=${VITE_PUBLIC_BUILDER_KEY}
     depends_on:
       - backend
     networks:
-      - odometry-network
-
-
+      - webadmin_net
+    restart: unless-stopped
+    
 
 networks:
-  odometry-network:
+  webadmin_net:
     driver: bridge
