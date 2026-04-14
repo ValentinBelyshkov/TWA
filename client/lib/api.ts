@@ -234,3 +234,40 @@ export async function getTerraSLAMHealth(): Promise<{
     container_status: string;
   }>("/api/control/terraslam/health");
 }
+
+export async function getTerraSLAMStatus(): Promise<{
+  system_status: string;
+  components: Record<string, string>;
+  publisher_mode: string;
+  orphaned_processes: Record<string, number>;
+  supervisor_output: string;
+  error?: string;
+}> {
+  return request<{
+    system_status: string;
+    components: Record<string, string>;
+    publisher_mode: string;
+    orphaned_processes: Record<string, number>;
+    supervisor_output: string;
+    error?: string;
+  }>("/api/control/terraslam/status");
+}
+
+export async function getTerraSLAMLogs(
+  component: string,
+  lines?: number,
+): Promise<{
+  component: string;
+  stderr_logs: string;
+  stdout_logs: string;
+  status_indicators: {
+    tracking_lost: boolean;
+    not_initialized: boolean;
+    initializing: boolean;
+    valid_data: boolean;
+  };
+}> {
+  const params = new URLSearchParams();
+  if (lines) params.append("lines", lines.toString());
+  return request(`/api/control/terraslam/logs/${component}?${params}`);
+}

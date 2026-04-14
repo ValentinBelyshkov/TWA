@@ -13,6 +13,11 @@ interface OperationScreenProps {
   hasVideoStream: boolean;
   videoCanvasRef: RefObject<HTMLCanvasElement | null>; 
   gpsStatus?: GPSStatus;
+  systemStatus?: {
+    status: "working" | "warning" | "not_working" | "error";
+    publisher_mode: string;
+    components: Record<string, string>;
+  } | null;
 }
 
 export function OperationScreen({
@@ -26,6 +31,7 @@ export function OperationScreen({
   hasVideoStream,
   videoCanvasRef,
   gpsStatus,
+  systemStatus,
 }: OperationScreenProps) {
 
   // GPS logic: use correct property names (dronePosition uses "lng" not "lon")
@@ -128,8 +134,25 @@ export function OperationScreen({
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Статус системы:</span>
-              <span className="font-semibold text-green-600">✓ Готов</span>
+              <span className={`font-semibold ${
+                systemStatus?.status === "working" ? "text-green-600" :
+                systemStatus?.status === "warning" ? "text-amber-600" :
+                systemStatus?.status === "error" ? "text-red-600" :
+                "text-muted-foreground"
+              }`}>
+                {systemStatus?.status === "working" ? "✓ Работает" :
+                 systemStatus?.status === "warning" ? "⚠️ Внимание" :
+                 systemStatus?.status === "error" ? "✗ Ошибка" :
+                 systemStatus?.status === "not_working" ? "✗ Не работает" :
+                 "Загрузка..."}
+              </span>
             </div>
+            {systemStatus && (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Режим:</span>
+                <span className="font-medium">{systemStatus.publisher_mode === "folder" ? "Симуляция (папка)" : "Камера (RealSense)"}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Калибровка:</span>
               <span className={`font-semibold ${showCalibration ? "text-amber-600" : "text-green-600"}`}>
