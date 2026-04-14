@@ -1,4 +1,13 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "";
+
+function getFullUrl(endpoint: string): string {
+  let baseUrl = API_BASE_URL;
+  let cleanEndpoint = endpoint;
+  if (baseUrl.startsWith("/") && cleanEndpoint.startsWith("/api")) {
+    cleanEndpoint = cleanEndpoint.replace(/^\/api/, "");
+  }
+  return `${baseUrl}${cleanEndpoint}`;
+}
 
 interface ProjectBackend {
   id: string;
@@ -45,11 +54,7 @@ async function request<T>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  let baseUrl = API_BASE_URL;
-  if (baseUrl.startsWith("/") && endpoint.startsWith("/api")) {
-    endpoint = endpoint.replace(/^\/api/, "");
-  }
-  const url = `${baseUrl}${endpoint}`;
+  const url = getFullUrl(endpoint);
 
   const response = await fetch(url, {
     headers: {
@@ -114,7 +119,7 @@ export async function uploadProjectVideo(
   formData.append("file", file);
 
   const response = await fetch(
-    `${API_BASE_URL}/api/projects/${projectId}/video`,
+    getFullUrl(`/api/projects/${projectId}/video`),
     {
       method: "POST",
       body: formData,
@@ -146,10 +151,7 @@ export async function uploadCalibrationImage(
   const formData = new FormData();
   formData.append("file", file);
 
-  let url = `${API_BASE_URL}/api/projects/${projectId}/upload-image`;
-  if (url.startsWith("/")) {
-    url = url.replace(/^\/api/, "");
-  }
+  const url = getFullUrl(`/api/projects/${projectId}/upload-image`);
 
   const response = await fetch(url, {
     method: "POST",
@@ -173,10 +175,7 @@ export async function saveGCPPoints(
   gcp_filename: string;
   calibration_status: string;
 }> {
-  let url = `${API_BASE_URL}/api/projects/${projectId}/save-gcp`;
-  if (url.startsWith("/")) {
-    url = url.replace(/^\/api/, "");
-  }
+  const url = getFullUrl(`/api/projects/${projectId}/save-gcp`);
 
   const response = await fetch(url, {
     method: "POST",
