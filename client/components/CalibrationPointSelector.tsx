@@ -131,6 +131,10 @@ export function CalibrationPointSelector({
     );
   };
 
+  const updatePendingPointPosition = (x: number, y: number) => {
+    setPendingPoint((prev) => (prev ? { ...prev, imageX: x, imageY: y } : null));
+  };
+
   const handleSaveGCP = async () => {
     if (completedPoints.length !== REQUIRED_POINTS) {
       alert(`Пожалуйста, установите все ${REQUIRED_POINTS} контрольных точек`);
@@ -244,14 +248,14 @@ export function CalibrationPointSelector({
               <img
                 src={imageUrl}
                 alt="Calibration"
-                className="w-full h-full object-contain pointer-events-none select-none"
+                className="w-full h-full object-cover pointer-events-none select-none"
               />
 
               {/* Completed points on image - Draggable */}
               <AnimatePresence>
                 {completedPoints.map((point, idx) => (
                   <motion.div
-                    key={point.id}
+                    key={`${point.id}-${point.imageX}-${point.imageY}`}
                     drag
                     dragConstraints={imageContainerRef}
                     dragMomentum={false}
@@ -283,16 +287,29 @@ export function CalibrationPointSelector({
 
               {/* Pending point on image */}
               {pendingPoint?.imageX && (
-                <div
-                  className="absolute w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse z-20 flex items-center justify-center text-amber-900 text-xs font-bold"
+                <motion.div
+                  key={`pending-${pendingPoint.id}-${pendingPoint.imageX}-${pendingPoint.imageY}`}
+                  drag
+                  dragConstraints={imageContainerRef}
+                  dragMomentum={false}
+                  onDragEnd={(_, info) => {
+                    const rect = imageContainerRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      const x = info.point.x - rect.left;
+                      const y = info.point.y - rect.top;
+                      updatePendingPointPosition(x, y);
+                    }
+                  }}
+                  className="absolute w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse z-20 flex items-center justify-center text-amber-900 text-xs font-bold cursor-grab active:cursor-grabbing"
                   style={{
                     left: pendingPoint.imageX,
                     top: pendingPoint.imageY,
-                    transform: "translate(-50%, -50%)",
+                    x: "-50%",
+                    y: "-50%",
                   }}
                 >
                   {pointNumber}
-                </div>
+                </motion.div>
               )}
             </div>
           </div>

@@ -43,6 +43,7 @@ export function MapComponent({
   const droneMarkerRef = useRef<L.Marker | null>(null);
   const pathPolylineRef = useRef<L.Polyline | null>(null);
   const selectedPointMarkerRef = useRef<L.Marker | null>(null);
+  const pathMarkersRef = useRef<L.Marker[]>([]);
 
   useEffect(() => {
     // Apply Leaflet icon fix
@@ -149,6 +150,25 @@ export function MapComponent({
 
   // Update path
   useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Remove old markers
+    pathMarkersRef.current.forEach((marker) => marker.remove());
+    pathMarkersRef.current = [];
+
+    // Add new markers
+    path.forEach((p, idx) => {
+      const marker = L.marker([p.lat, p.lng], {
+        icon: L.divIcon({
+          className: "custom-path-marker",
+          html: `<div class="w-6 h-6 rounded-full border-2 border-white bg-primary shadow-lg flex items-center justify-center text-white text-[10px] font-bold">${idx + 1}</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        }),
+      }).addTo(mapRef.current!);
+      pathMarkersRef.current.push(marker);
+    });
+
     if (pathPolylineRef.current) {
       const pathCoords = path.map((p) => [p.lat, p.lng] as [number, number]);
       pathPolylineRef.current.setLatLngs(pathCoords);
