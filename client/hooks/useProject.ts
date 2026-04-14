@@ -5,6 +5,7 @@ import {
   uploadCalibrationImage,
   saveGCPPoints,
   controlTerraSLAMComponent,
+  getTerraSLAMStatus,
   type Project,
 } from "@/lib/api";
 import type { CalibrationPoint } from "@/components/CalibrationPointSelector";
@@ -66,6 +67,13 @@ export function useProject(projectId: string | undefined) {
     alt: null,
   });
 
+  // System status from TerraSLAM
+  const [systemStatus, setSystemStatus] = useState<{
+    status: "working" | "warning" | "not_working" | "error";
+    publisher_mode: string;
+    components: Record<string, string>;
+  } | null>(null);
+
   const videoCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const gpsWsRef = useRef<WebSocket | null>(null);
@@ -91,6 +99,36 @@ export function useProject(projectId: string | undefined) {
       );
     }
   }, [project]);
+
+  // Poll TerraSLAM system status
+  useEffect(() => {
+    if (!projectId || calibrationStep !== "complete") return;
+
+    const fetchStatus = async () => {
+      try {
+        const status = await getTerraSLAMStatus();
+        setSystemStatus({
+          status: status.system_status,
+          publisher_mode: status.publisher_mode,
+          components: status.components,
+        });
+      } catch (err) {
+        console.error("Failed to fetch TerraSLAM status:", err);
+        setSystemStatus({
+          status: "error",
+          publisher_mode: "unknown",
+          components: {},
+        });
+      }
+    };
+
+    // Initial fetch
+    fetchStatus();
+
+    // Poll every 3 seconds
+    const interval = setInterval(fetchStatus, 3000);
+    return () => clearInterval(interval);
+  }, [projectId, calibrationStep]);
 
   // Video WebSocket (existing)
   useEffect(() => {
@@ -239,9 +277,10 @@ export function useProject(projectId: string | undefined) {
 
   const startRecording = useCallback(async () => {
     try {
-      await controlTerraSLAMComponent("all", "start");
+      // Restart all components instead of just starting
+      await controlTerraSLAMComponent("all", "restart");
     } catch (err) {
-      console.error("Failed to start TerraSLAM:", err);
+      console.error("Failed to restart TerraSLAM:", err);
     }
 
     setIsRecording(true);
@@ -369,5 +408,6 @@ export function useProject(projectId: string | undefined) {
     clearUploadError,
     refetch,
     gpsStatus, // NEW: Export GPS status
+    systemStatus, // NEW: Export system status from TerraSLAM
   };
 }

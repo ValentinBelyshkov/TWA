@@ -76,10 +76,28 @@ TERRASLAM_CONTAINER = "TerraSLAM"
 SUPERVISOR_SOCKET = "/tmp/supervisor.sock"
 SUPERVISOR_CMD = f"/usr/bin/supervisorctl -s unix://{SUPERVISOR_SOCKET}"
 
+# Component mappings (matches control.sh)
+COMPONENT_MAPPING = {
+    "slam": "slam_core",
+    "relay": "relay",
+    "publisher": "image_publisher",  # Generic alias - will resolve to active mode
+    "publisher:folder": "image_publisher_folder",
+    "publisher:realsense": "image_publisher_realsense",
+}
+
+# Log file name mapping (program name -> actual log filename)
+LOG_NAMES = {
+    "slam_core": "slam_core",
+    "relay": "relay",
+    "image_publisher_folder": "publisher_folder",
+    "image_publisher_realsense": "publisher_realsense",
+}
+
+
 @router.post("/terraslam/component")
 async def control_terraslam_component(action: ComponentAction) -> CommandResponse:
     """Control TerraSLAM components (slam, relay, publisher, all)."""
-    valid_components = ["slam", "relay", "publisher", "all"]
+    valid_components = ["slam", "relay", "publisher", "all", "publisher:folder", "publisher:realsense"]
     valid_actions = ["start", "stop", "restart", "status"]
     
     if action.component not in valid_components:
@@ -90,10 +108,13 @@ async def control_terraslam_component(action: ComponentAction) -> CommandRespons
     try:
         container = docker_client.containers.get(TERRASLAM_CONTAINER)
         
+        # Resolve component name for supervisor
+        supervisor_component = COMPONENT_MAPPING.get(action.component, action.component)
+        
         if action.action == "status":
-            result = container.exec_run(f"{SUPERVISOR_CMD} status")
+            result = container.exec_run(f"{SUPERVISOR_CMD} status {supervisor_component}")
         else:
-            result = container.exec_run(f"{SUPERVISOR_CMD} {action.action} {action.component}")
+            result = container.exec_run(f"{SUPERVISOR_CMD} {action.action} {supervisor_component}")
         
         output = result.output.decode("utf-8") if result.output else ""
         
@@ -102,6 +123,132 @@ async def control_terraslam_component(action: ComponentAction) -> CommandRespons
             output=output,
             error=None if result.exit_code == 0 else "Command failed"
         )
+    except docker.errors.NotFound:
+        raise HTTPException(503, "TerraSLAM container not found")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.get("/terraslam/status")
+async def get_terraslam_status():
+    """Get detailed status of all TerraSLAM components including system status from logs."""
+    try:
+        container = docker_client.containers.get(TERRASLAM_CONTAINER)
+        
+        # Get supervisor status for all components
+        result = container.exec_run(f"{SUPERVISOR_CMD} status all")
+        supervisor_output = result.output.decode("utf-8") if result.output else ""
+        
+        # Parse individual component statuses
+        components_status = {}
+        for line in supervisor_output.strip().split("\n"):
+            if not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                comp_name = parts[0]
+                status = parts[1]
+                components_status[comp_name] = status
+        
+        # Check for orphaned processes
+        orphaned_processes = {}
+        process_patterns = {
+            "slam": "orb_slam3|slam_core|rgbd|mono",
+            "relay": "relay.py",
+            "publisher": "image_publish.py",
+            "publisher:folder": "image_publish.py.*folder",
+            "publisher:realsense": "realsense.py",
+        }
+        
+        for comp, pattern in process_patterns.items():
+            result = container.exec_run(
+                f"/bin/bash -c \"ps aux | grep -E '{pattern}' | grep -v grep | wc -l\""
+            )
+            count = int(result.output.decode("utf-8").strip()) if result.output else 0
+            if count > 0:
+                orphaned_processes[comp] = count
+        
+        # Get publisher mode
+        mode_result = container.exec_run("cat /tmp/terraslam_publisher_mode 2>/dev/null || echo 'folder'")
+        publisher_mode = mode_result.output.decode("utf-8").strip() if mode_result.output else "folder"
+        
+        # Determine overall system status
+        # System is working if all main components are RUNNING and no orphaned processes
+        main_components = ["slam_core", "relay"]
+        if publisher_mode == "folder":
+            main_components.append("image_publisher_folder")
+        else:
+            main_components.append("image_publisher_realsense")
+        
+        all_running = all(
+            components_status.get(comp, "") == "RUNNING" 
+            for comp in main_components
+        )
+        has_orphans = len(orphaned_processes) > 0
+        
+        if all_running and not has_orphans:
+            system_status = "working"
+        elif has_orphans:
+            system_status = "warning"
+        else:
+            system_status = "not_working"
+        
+        return {
+            "system_status": system_status,
+            "components": components_status,
+            "publisher_mode": publisher_mode,
+            "orphaned_processes": orphaned_processes,
+            "supervisor_output": supervisor_output
+        }
+    except docker.errors.NotFound:
+        return {"system_status": "not_working", "error": "Container not found"}
+    except Exception as e:
+        return {"system_status": "error", "error": str(e)}
+
+
+@router.get("/terraslam/logs/{component}")
+async def get_terraslam_logs(component: str, lines: int = 50):
+    """Get recent logs for a specific component."""
+    try:
+        container = docker_client.containers.get(TERRASLAM_CONTAINER)
+        
+        # Resolve component name
+        supervisor_name = COMPONENT_MAPPING.get(component, component)
+        log_name = LOG_NAMES.get(supervisor_name, supervisor_name)
+        
+        # Get stderr logs (ROS 2 sends all logs here)
+        result = container.exec_run(f"tail -{lines} /var/log/supervisor/{log_name}.err.log")
+        stderr_logs = result.output.decode("utf-8") if result.output else ""
+        
+        # Get stdout logs
+        result = container.exec_run(f"tail -{lines} /var/log/supervisor/{log_name}.out.log")
+        stdout_logs = result.output.decode("utf-8") if result.output else ""
+        
+        # Parse logs for status indicators (like the check_queue function)
+        status_indicators = {
+            "tracking_lost": False,
+            "not_initialized": False,
+            "initializing": False,
+            "valid_data": False
+        }
+        
+        # Look for special coordinate patterns in logs
+        for line in stderr_logs.split("\n"):
+            if "-3.0" in line and "tracking" in line.lower():
+                status_indicators["tracking_lost"] = True
+            elif "-1.0" in line and "init" in line.lower():
+                status_indicators["not_initialized"] = True
+            elif "initializing" in line.lower() or "waiting" in line.lower():
+                status_indicators["initializing"] = True
+            elif any(c.isdigit() for c in line) and "lat" in line.lower():
+                status_indicators["valid_data"] = True
+        
+        return {
+            "component": component,
+            "stderr_logs": stderr_logs,
+            "stdout_logs": stdout_logs,
+            "status_indicators": status_indicators
+        }
     except docker.errors.NotFound:
         raise HTTPException(503, "TerraSLAM container not found")
     except Exception as e:

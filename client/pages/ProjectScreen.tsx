@@ -35,6 +35,8 @@ export default function ProjectScreen() {
     handleCalibrationComplete,
     handleCalibrationCancel,
     clearUploadError,
+    gpsStatus,
+    systemStatus,
   } = useProject(projectId);
 
   if (isLoading) {
@@ -98,7 +100,9 @@ export default function ProjectScreen() {
           showCalibration={showCalibration}
           onCalibrate={handleCalibrate}
           hasVideoStream={hasVideoStream}
-          videoCanvasRef={videoCanvasRef} 
+          videoCanvasRef={videoCanvasRef}
+          gpsStatus={gpsStatus}
+          systemStatus={systemStatus}
         />
       )}
     </div>
