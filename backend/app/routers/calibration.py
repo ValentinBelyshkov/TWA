@@ -57,10 +57,10 @@ async def upload_calibration_image(request: Request, project_id: str, file: Uplo
     return {
         "success": True,
         "image_filename": file.filename,
-        "image_url": f"/api/projects/{project_id}/images/{file.filename}"
+        "image_url": f"/api/projects/{project_id}/calibrations/{file.filename}"
     }
 
-@router.get("/{project_id}/images/{image_name}")
+@router.get("/{project_id}/calibrations/{image_name}")
 async def get_calibration_image(request: Request, project_id: str, image_name: str):
     """Serve calibration images from the project folder."""
     projects_root = get_projects_root(request)
