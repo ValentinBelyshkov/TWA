@@ -201,10 +201,10 @@ export function CalibrationPointSelector({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-hidden">
-      <div className="bg-white rounded-2xl max-w-7xl w-full flex flex-col shadow-2xl overflow-hidden max-h-[95vh]">
+    <div className="flex-1 bg-slate-50 flex flex-col p-4 lg:p-6 overflow-hidden">
+      <div className="bg-white rounded-2xl max-w-7xl w-full mx-auto flex flex-col shadow-xl overflow-hidden flex-1">
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary to-secondary text-white p-5 flex justify-between items-center">
+        <div className="bg-gradient-to-r from-primary to-secondary text-white p-5 flex justify-between items-center shrink-0">
           <div>
             <h2 className="text-xl font-bold">Калибровка системы</h2>
             <p className="text-white/80 text-sm">{getProgressText()}</p>
