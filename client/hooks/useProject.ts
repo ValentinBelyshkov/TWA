@@ -10,7 +10,7 @@ import {
 } from "@/lib/api";
 import type { CalibrationPoint } from "@/components/CalibrationPointSelector";
 
-export type CalibrationStep = "instructions" | "upload" | "pairing" | "complete";
+export type CalibrationStep = "idle" | "instructions" | "upload" | "pairing" | "complete";
 
 export interface TelemetryData {
   height: number;
@@ -49,7 +49,7 @@ export function useProject(projectId: string | undefined) {
     status: "idle",
   });
   const [showCalibration, setShowCalibration] = useState(true);
-  const [calibrationStep, setCalibrationStep] = useState<CalibrationStep>("instructions");
+  const [calibrationStep, setCalibrationStep] = useState<CalibrationStep>("idle");
   const [uploadedImage, setUploadedImage] = useState<{
     filename: string;
     url: string;
@@ -93,16 +93,20 @@ export function useProject(projectId: string | undefined) {
 
   useEffect(() => {
     if (project) {
-      setShowCalibration(project.calibrationStatus !== "calibrated");
-      setCalibrationStep(
-        project.calibrationStatus === "calibrated" ? "complete" : "instructions"
-      );
+      const isCalibrated = project.calibrationStatus === "calibrated";
+      setShowCalibration(!isCalibrated);
+      if (isCalibrated) {
+        setCalibrationStep("complete");
+      } else if (calibrationStep === "complete") {
+        // If it was complete but now project says not calibrated, go back to idle
+        setCalibrationStep("idle");
+      }
     }
   }, [project]);
 
   // Poll TerraSLAM system status
   useEffect(() => {
-    if (!projectId || calibrationStep !== "complete") return;
+    if (!projectId || (calibrationStep !== "complete" && calibrationStep !== "idle")) return;
 
     const fetchStatus = async () => {
       try {
@@ -132,7 +136,7 @@ export function useProject(projectId: string | undefined) {
 
   // Video WebSocket (existing)
   useEffect(() => {
-    if (!projectId || calibrationStep !== "complete") return;
+    if (!projectId || (calibrationStep !== "complete" && calibrationStep !== "idle")) return;
 
     const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:8000"}/api/video/ws/${projectId}`;
     const ws = new WebSocket(wsUrl);
@@ -192,7 +196,7 @@ export function useProject(projectId: string | undefined) {
 
   // NEW: GPS WebSocket with 1-second timeout
   useEffect(() => {
-    if (!projectId || calibrationStep !== "complete") return;
+    if (!projectId || (calibrationStep !== "complete" && calibrationStep !== "idle")) return;
 
     const connectGPS = () => {
       // Connect directly to rosbridge (not through backend)
@@ -278,7 +282,7 @@ export function useProject(projectId: string | undefined) {
   const startRecording = useCallback(async () => {
     try {
       // Restart all components instead of just starting
-      await controlTerraSLAMComponent("all", "restart");
+      await controlTerraSLAMComponent("all", "restart", projectId);
     } catch (err) {
       console.error("Failed to restart TerraSLAM:", err);
     }
@@ -299,7 +303,7 @@ export function useProject(projectId: string | undefined) {
     }
 
     try {
-      await controlTerraSLAMComponent("all", "stop");
+      await controlTerraSLAMComponent("all", "stop", projectId);
     } catch (err) {
       console.error("Failed to stop TerraSLAM:", err);
     }
@@ -309,13 +313,8 @@ export function useProject(projectId: string | undefined) {
   }, []);
 
   const handleCalibrate = useCallback(() => {
-    if (project?.calibrationStatus === "calibrated") {
-      setCalibrationStep("complete");
-    } else {
-      setCalibrationStep("instructions");
-    }
-    setShowCalibration(false);
-  }, [project?.calibrationStatus]);
+    setCalibrationStep("instructions");
+  }, []);
 
   const handleInstructionsNext = useCallback(() => {
     setCalibrationStep("upload");
@@ -374,10 +373,9 @@ export function useProject(projectId: string | undefined) {
   );
 
   const handleCalibrationCancel = useCallback(() => {
-    setShowCalibration(true);
-    setCalibrationStep("instructions");
+    setCalibrationStep(project?.calibrationStatus === "calibrated" ? "complete" : "idle");
     setUploadedImage(null);
-  }, []);
+  }, [project?.calibrationStatus]);
 
   const clearUploadError = useCallback(() => {
     setUploadError(null);

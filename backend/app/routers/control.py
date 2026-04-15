@@ -1,7 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import Literal
+from typing import Literal, Optional
 import docker
+
+from app.routers.projects import (
+    get_projects_root,
+    read_project_metadata,
+)
 
 router = APIRouter()
 
@@ -10,6 +15,7 @@ docker_client = docker.from_env()
 class ComponentAction(BaseModel):
     component: str
     action: str
+    project_id: Optional[str] = None
 
 class CommandResponse(BaseModel):
     success: bool
@@ -95,7 +101,7 @@ LOG_NAMES = {
 
 
 @router.post("/terraslam/component")
-async def control_terraslam_component(action: ComponentAction) -> CommandResponse:
+async def control_terraslam_component(action: ComponentAction, request: Request) -> CommandResponse:
     """Control TerraSLAM components (slam, relay, publisher, all)."""
     valid_components = ["slam", "relay", "publisher", "all", "publisher:folder", "publisher:realsense"]
     valid_actions = ["start", "stop", "restart", "status"]
@@ -110,6 +116,14 @@ async def control_terraslam_component(action: ComponentAction) -> CommandRespons
         
         # Resolve component name for supervisor
         supervisor_component = COMPONENT_MAPPING.get(action.component, action.component)
+
+        # Handle folder path for image_publisher_folder
+        if action.project_id and action.component in ["publisher", "publisher:folder", "all"]:
+            projects_root = get_projects_root(request)
+            project = read_project_metadata(projects_root, action.project_id)
+            if project and project.frames_path:
+                # Write frames path to a file that the publisher can read
+                container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
         
         if action.action == "status":
             result = container.exec_run(f"{SUPERVISOR_CMD} status {supervisor_component}")

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Plus, Trash2, Eye } from "lucide-react";
 import { ProjectModal, ProjectType } from "@/components/ProjectModal";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -17,6 +17,7 @@ import { Settings } from "lucide-react";
 
 export default function Index() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -49,6 +50,7 @@ export default function Index() {
       ]);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Проект успешно создан", { duration: 1000 });
+      navigate(`/project/${newProject.id}`);
     },
     onError: (error: any) => {
       toast.error(`Ошибка при создании проекта: ${error.message}`, {
@@ -231,6 +233,7 @@ export default function Index() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         onCreateProject={handleCreateProject}
+        isLoading={createMutation.isPending}
       />
       
       <SettingsModal

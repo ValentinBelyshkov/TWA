@@ -88,35 +88,33 @@ export function OperationScreen({
 
         {/* Controls */}
         <div className="flex gap-3 flex-wrap flex-col">
-          {showCalibration ? (
+          {!isRecording ? (
+            <button
+              onClick={onStartRecording}
+              disabled={!gps.hasSignal || showCalibration}
+              className="flex-1 btn-primary py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="text-lg">▶️</span>
+              Поднять и начать запись
+            </button>
+          ) : (
+            <button
+              onClick={onStopRecording}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+            >
+              <span className="text-lg">⏹️</span>
+              Остановить запись
+            </button>
+          )}
+          
+          {!isRecording && (
             <button
               onClick={onCalibrate}
-              className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
+              className="flex-1 border-2 border-primary text-primary hover:bg-primary/5 font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
             >
               <span className="text-lg">⚙️</span>
               Калибровка
             </button>
-          ) : (
-            <>
-              {!isRecording ? (
-                <button
-                  onClick={onStartRecording}
-                  disabled={!gps.hasSignal}
-                  className="flex-1 btn-primary py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="text-lg">▶️</span>
-                  Поднять и начать запись
-                </button>
-              ) : (
-                <button
-                  onClick={onStopRecording}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                >
-                  <span className="text-lg">⏹️</span>
-                  Остановить запись
-                </button>
-              )}
-            </>
           )}
         </div>
       </div>
@@ -125,7 +123,7 @@ export function OperationScreen({
       <div className="w-full lg:w-[45%] flex flex-col gap-4">
         {/* Map */}
         <div className="flex-1 bg-white rounded-lg border-2 border-border relative overflow-hidden min-h-[300px] lg:min-h-0">
-          <MapComponent dronePosition={dronePosition} path={dronePath} />
+          <MapComponent dronePosition={dronePosition} path={dronePath} showMarkers={false} />
         </div>
 
         {/* Status Panel - GPS info stays here */}
