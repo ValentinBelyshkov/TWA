@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { Progress } from "@/components/ui/progress";
+
 export type ProjectType = "камера" | "симуляция";
 
 interface ProjectModalProps {
@@ -25,6 +27,8 @@ interface ProjectModalProps {
   onOpenChange: (open: boolean) => void;
   onCreateProject: (name: string, type: ProjectType, videoFile?: File) => void;
   isLoading?: boolean;
+  progress?: number;
+  remainingTime?: number;
 }
 
 export function ProjectModal({
@@ -32,6 +36,8 @@ export function ProjectModal({
   onOpenChange,
   onCreateProject,
   isLoading,
+  progress,
+  remainingTime,
 }: ProjectModalProps) {
   const [projectName, setProjectName] = useState("");
   const [projectType, setProjectType] = useState<ProjectType | "">("");
@@ -84,10 +90,35 @@ export function ProjectModal({
         </AlertDialogHeader>
 
         {isLoading ? (
-          <div className="py-12 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="font-semibold text-foreground">Загрузка и обработка видео...</p>
-            <p className="text-sm text-muted-foreground mt-2">Пожалуйста, подождите, идет нарезка кадров</p>
+          <div className="py-8 px-2 text-center">
+            <div className="mb-6 relative">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
+              {progress !== undefined && (
+                <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
+                  {Math.round(progress * 100)}%
+                </div>
+              )}
+            </div>
+            
+            <h3 className="font-bold text-lg text-foreground mb-2">
+              Обработка видео...
+            </h3>
+            
+            {progress !== undefined && (
+              <div className="space-y-3 mb-4">
+                <Progress value={progress * 100} className="h-2" />
+                <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                  <span>Прогресс: {Math.round(progress * 100)}%</span>
+                  {remainingTime !== undefined && remainingTime > 0 && (
+                    <span>Осталось: ~{Math.round(remainingTime)} сек.</span>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            <p className="text-sm text-muted-foreground">
+              Пожалуйста, подождите, идет нарезка кадров для калибровки
+            </p>
           </div>
         ) : step === "type" ? (
           <div className="space-y-4 py-4">
