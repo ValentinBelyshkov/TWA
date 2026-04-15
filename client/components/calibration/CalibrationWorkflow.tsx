@@ -32,8 +32,8 @@ export function CalibrationWorkflow({
   projectId,
 }: CalibrationWorkflowProps) {
   const wrapOverlay = (content: React.ReactNode) => (
-    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col p-4 lg:p-6 overflow-auto">
-      <div className="min-h-full w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl relative overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col overflow-auto">
+      <div className="min-h-full w-full bg-white shadow-xl relative overflow-hidden flex flex-col">
         <button
           onClick={onCalibrationCancel}
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground z-10 p-2 hover:bg-slate-100 rounded-full transition-colors"
@@ -48,7 +48,22 @@ export function CalibrationWorkflow({
   );
 
   if (step === "instructions") {
-    return wrapOverlay(<InstructionsStep onNext={onInstructionsNext} />);
+    return wrapOverlay(
+      <div className="flex flex-col h-full">
+        <div className="flex-1 flex items-center justify-center">
+          <InstructionsStep onNext={() => {}} />
+        </div>
+        <div className="p-6 border-t bg-slate-50 flex justify-center shrink-0">
+          <button
+            onClick={onInstructionsNext}
+            className="w-full max-w-md bg-primary text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+          >
+            <span className="w-4 h-4">▶</span>
+            Продолжить
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (step === "upload") {

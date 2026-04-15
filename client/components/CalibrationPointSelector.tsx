@@ -201,8 +201,8 @@ export function CalibrationPointSelector({
   };
 
   return (
-    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col p-4 lg:p-6 overflow-auto">
-      <div className="min-h-full bg-white rounded-2xl max-w-7xl w-full mx-auto flex flex-col shadow-xl overflow-hidden">
+    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col overflow-auto">
+      <div className="min-h-full bg-white w-full flex flex-col shadow-xl overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-primary to-secondary text-white p-5 flex justify-between items-center shrink-0">
           <div>
@@ -269,14 +269,13 @@ export function CalibrationPointSelector({
                     }}
                     onClick={(e) => e.stopPropagation()}
                     initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
+                    animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
                     exit={{ scale: 0, opacity: 0 }}
-                    className="absolute w-8 h-8 rounded-full border-2 border-white bg-primary shadow-lg cursor-grab active:cursor-grabbing z-10 flex items-center justify-center text-white text-xs font-bold"
+                    transition={{ duration: 0.2 }}
+                    className="absolute w-8 h-8 rounded-full border-2 border-white bg-primary shadow-lg cursor-grab active:cursor-grabbing z-10 flex items-center justify-center text-white text-xs font-bold -ml-4 -mt-4"
                     style={{
                       left: point.imageX,
                       top: point.imageY,
-                      x: "-50%",
-                      y: "-50%",
                     }}
                     title={`Точка ${idx + 1}`}
                   >
@@ -300,12 +299,12 @@ export function CalibrationPointSelector({
                       updatePendingPointPosition(x, y);
                     }
                   }}
-                  className="absolute w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse z-20 flex items-center justify-center text-amber-900 text-xs font-bold cursor-grab active:cursor-grabbing"
+                  animate={{ x: 0, y: 0 }}
+                  transition={{ duration: 0 }}
+                  className="absolute w-8 h-8 rounded-full border-2 border-amber-400 bg-amber-300 shadow-lg animate-pulse z-20 flex items-center justify-center text-amber-900 text-xs font-bold cursor-grab active:cursor-grabbing -ml-4 -mt-4"
                   style={{
                     left: pendingPoint.imageX,
                     top: pendingPoint.imageY,
-                    x: "-50%",
-                    y: "-50%",
                   }}
                 >
                   {pointNumber}
@@ -313,6 +312,7 @@ export function CalibrationPointSelector({
               )}
             </div>
           </div>
+
 
           {/* Column 2: Map (Col 6-9) */}
           <div className="lg:col-span-4 flex flex-col min-h-0">
@@ -439,29 +439,29 @@ export function CalibrationPointSelector({
                 </div>
               </div>
             )}
-
-            {/* Save Button */}
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              {saveError && (
-                <p className="text-[10px] text-red-500 mb-2 bg-red-50 p-2 rounded border border-red-100">{saveError}</p>
-              )}
-              <Button
-                onClick={handleSaveGCP}
-                disabled={completedPoints.length !== REQUIRED_POINTS || isSaving}
-                className="w-full gap-2 h-11 font-bold text-sm shadow-lg shadow-primary/20"
-              >
-                {isSaving ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
-                {isSaving ? "Сохранение..." : "Продолжить"}
-              </Button>
-              <p className="text-[10px] text-center text-slate-400 mt-3">
-                Необходимо установить 5 пар точек для завершения
-              </p>
-            </div>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t bg-slate-50 flex flex-col items-center shrink-0">
+          {saveError && (
+            <p className="text-[10px] text-red-500 mb-3 bg-red-50 p-2 rounded border border-red-100 max-w-md w-full">{saveError}</p>
+          )}
+          <Button
+            onClick={handleSaveGCP}
+            disabled={completedPoints.length !== REQUIRED_POINTS || isSaving}
+            className="w-full max-w-md gap-2 h-12 font-bold text-sm shadow-lg shadow-primary/20"
+          >
+            {isSaving ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            {isSaving ? "Сохранение..." : "Продолжить"}
+          </Button>
+          <p className="text-[10px] text-center text-slate-400 mt-3">
+            Необходимо установить {REQUIRED_POINTS} пар точек для завершения
+          </p>
         </div>
       </div>
     </div>

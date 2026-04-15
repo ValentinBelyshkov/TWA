@@ -97,8 +97,8 @@ export function CalibrationWizard({
   const canProceed = currentFrame < 2 ? true : allFramesComplete;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+      <div className="bg-white w-full h-full overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6">
           <h2 className="text-2xl font-bold mb-2">Калибровка камеры</h2>
@@ -302,16 +302,13 @@ export function CalibrationWizard({
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-50 border-t border-border p-6 flex items-center justify-between">
-          <Button variant="outline" onClick={onCancel}>
-            Отмена
-          </Button>
-
-          <div className="flex items-center gap-3">
+        <div className="bg-gray-50 border-t border-border p-6 flex flex-col items-center gap-4">
+          <div className="flex items-center justify-center gap-3 w-full max-w-md">
             <Button
               variant="outline"
               onClick={() => setCurrentFrame((prev) => Math.max(0, prev - 1))}
               disabled={currentFrame === 0}
+              className="flex-1"
             >
               <ChevronLeft className="w-4 h-4 mr-1" />
               Назад
@@ -321,6 +318,7 @@ export function CalibrationWizard({
               <Button
                 onClick={() => setCurrentFrame((prev) => prev + 1)}
                 disabled={!isCurrentFrameComplete}
+                className="flex-1"
               >
                 Далее
                 <ChevronRight className="w-4 h-4 ml-1" />
@@ -329,13 +327,17 @@ export function CalibrationWizard({
               <Button
                 onClick={handleSave}
                 disabled={!allFramesComplete}
-                className="gap-2"
+                className="gap-2 flex-1"
               >
                 <Check className="w-4 h-4" />
                 Сохранить калибровку
               </Button>
             )}
           </div>
+          
+          <Button variant="ghost" onClick={onCancel} className="text-muted-foreground">
+            Отмена
+          </Button>
         </div>
       </div>
     </div>
