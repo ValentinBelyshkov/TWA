@@ -20,6 +20,10 @@ export default function Index() {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    progress: number;
+    remainingTime: number;
+  } | null>(null);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
@@ -38,8 +42,31 @@ export default function Index() {
     }): Promise<Project> => {
       let project = await createProject(name, type);
       if (videoFile) {
-        const uploadResult = await uploadProjectVideo(project.id, videoFile);
-        project = { ...project, videoFilename: uploadResult.filename };
+        // Connect to telemetry websocket for progress updates
+        const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:8000"}/api/telemetry/ws/${project.id}`;
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.project_id === project.id && data.type === "ffmpeg_progress") {
+              setUploadProgress({
+                progress: data.progress,
+                remainingTime: data.remaining_time,
+              });
+            }
+          } catch (e) {
+            console.error("Failed to parse progress message:", e);
+          }
+        };
+
+        try {
+          const uploadResult = await uploadProjectVideo(project.id, videoFile);
+          project = { ...project, videoFilename: uploadResult.filename };
+        } finally {
+          ws.close();
+          setUploadProgress(null);
+        }
       }
       return project;
     },
@@ -234,6 +261,8 @@ export default function Index() {
         onOpenChange={setIsModalOpen}
         onCreateProject={handleCreateProject}
         isLoading={createMutation.isPending}
+        progress={uploadProgress?.progress}
+        remainingTime={uploadProgress?.remainingTime}
       />
       
       <SettingsModal

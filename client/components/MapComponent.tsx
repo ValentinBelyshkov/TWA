@@ -69,7 +69,7 @@ export function MapComponent({
     if (mapRef.current) return;
 
     // Initialize map
-    const map = L.map("map").setView(
+    const map = L.map(mapId.current).setView(
       [dronePosition.lat, dronePosition.lng],
       17,
     );
@@ -124,6 +124,13 @@ export function MapComponent({
         onMapClick(e.latlng.lat, e.latlng.lng);
       });
     }
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
   }, []);
 
   // Handle onMapClick changes
@@ -220,7 +227,7 @@ export function MapComponent({
 
   return (
     <div
-      id="map"
+      id={mapId.current}
       style={{
         width: "100%",
         height: "100%",

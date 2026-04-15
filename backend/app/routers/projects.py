@@ -8,10 +8,75 @@ import uuid
 import shutil
 import json
 import subprocess
+import asyncio
+import time
+from .telemetry import telemetry_manager
 
 from fastapi.encoders import jsonable_encoder
 
 router = APIRouter()
+
+def get_video_duration(input_file):
+    try:
+        result = subprocess.run([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", input_file
+        ], capture_output=True, text=True, check=True)
+        return float(result.stdout.strip())
+    except Exception as e:
+        print(f"Error getting duration: {e}")
+        return 0
+
+async def process_video_with_progress(project_id, input_file, output_pattern):
+    duration = get_video_duration(input_file)
+    start_time = time.time()
+    
+    # Use -progress pipe:1 to get progress info on stdout
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-y", "-i", input_file, 
+        "-vf", "fps=1", 
+        "-q:v", "2", 
+        "-progress", "pipe:1",
+        output_pattern,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+
+    while True:
+        line = await process.stdout.readline()
+        if not line:
+            break
+        
+        line_str = line.decode().strip()
+        if "out_time_us=" in line_str:
+            try:
+                us = int(line_str.split('=')[1])
+                progress = (us / 1000000) / duration if duration > 0 else 0
+                progress = min(progress, 0.99) # Keep at 99% until finished
+                
+                elapsed_time = time.time() - start_time
+                if progress > 0.01: # Avoid jitter at start
+                    total_estimated_time = elapsed_time / progress
+                    remaining_time = total_estimated_time - elapsed_time
+                else:
+                    remaining_time = 0
+                
+                await telemetry_manager.broadcast(project_id, {
+                    "type": "ffmpeg_progress",
+                    "progress": progress,
+                    "remaining_time": round(remaining_time, 1)
+                })
+            except (ValueError, IndexError):
+                pass
+                
+    await process.wait()
+    
+    # Send final 100% progress
+    await telemetry_manager.broadcast(project_id, {
+        "type": "ffmpeg_progress",
+        "progress": 1.0,
+        "remaining_time": 0
+    })
 
 def get_projects_root(request: Request) -> Path:
     """Get projects root path from app state."""
@@ -170,15 +235,10 @@ async def upload_video(request: Request, project_id: str, file: UploadFile = Fil
     output_pattern = str(frames_dir / "frame_%04d.jpg")
     
     try:
-        subprocess.run([
-            "ffmpeg", "-i", input_file, 
-            "-vf", "fps=1", 
-            "-q:v", "2", 
-            output_pattern
-        ], check=True, capture_output=True)
+        await process_video_with_progress(project_id, input_file, output_pattern)
         project.frames_path = str(frames_dir)
-    except subprocess.CalledProcessError as e:
-        print(f"FFmpeg error: {e.stderr.decode() if e.stderr else str(e)}")
+    except Exception as e:
+        print(f"FFmpeg error: {e}")
     
     write_project_metadata(projects_root, project)
     
