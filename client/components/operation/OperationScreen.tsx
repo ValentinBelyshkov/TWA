@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, type RefObject } from "react";
 import { MapComponent } from "@/components/MapComponent";
 import type { DronePosition, DronePath, GPSStatus } from "@/hooks/useProject";
 
