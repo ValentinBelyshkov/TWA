@@ -87,14 +87,6 @@ export function InstructionsStep({ onNext }: InstructionsStepProps) {
             </div>
           </div>
         </div>
-
-        <button
-          onClick={onNext}
-          className="w-full btn-primary py-3 flex items-center justify-center gap-2"
-        >
-          <Play className="w-4 h-4" />
-          Продолжить
-        </button>
     </div>
   );
 }
