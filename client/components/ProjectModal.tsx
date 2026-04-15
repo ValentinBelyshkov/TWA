@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -44,6 +44,15 @@ export function ProjectModal({
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [step, setStep] = useState<"type" | "video">("type");
 
+  useEffect(() => {
+    if (!open) {
+      setProjectName("");
+      setProjectType("");
+      setVideoFile(null);
+      setStep("type");
+    }
+  }, [open]);
+
   const handleCreate = () => {
     if (!projectName || !projectType) return;
 
@@ -57,7 +66,6 @@ export function ProjectModal({
       projectType as ProjectType,
       videoFile || undefined,
     );
-    handleReset();
   };
 
   const handleReset = () => {

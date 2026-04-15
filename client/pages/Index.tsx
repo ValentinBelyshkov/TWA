@@ -87,6 +87,7 @@ export default function Index() {
       ]);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Проект успешно создан", { duration: 1000 });
+      setIsModalOpen(false);
       navigate(`/project/${newProject.id}`);
     },
     onError: (error: any) => {
