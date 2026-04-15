@@ -89,6 +89,7 @@ COMPONENT_MAPPING = {
     "publisher": "image_publisher",  # Generic alias - will resolve to active mode
     "publisher:folder": "image_publisher_folder",
     "publisher:realsense": "image_publisher_realsense",
+    "rosbridge": "rosbridge",
 }
 
 # Log file name mapping (program name -> actual log filename)
@@ -103,7 +104,7 @@ LOG_NAMES = {
 @router.post("/terraslam/component")
 async def control_terraslam_component(action: ComponentAction, request: Request) -> CommandResponse:
     """Control TerraSLAM components (slam, relay, publisher, all)."""
-    valid_components = ["slam", "relay", "publisher", "all", "publisher:folder", "publisher:realsense"]
+    valid_components = ["slam", "relay", "publisher", "all", "publisher:folder", "publisher:realsense", "rosbridge"]
     valid_actions = ["start", "stop", "restart", "status"]
     
     if action.component not in valid_components:
@@ -114,16 +115,57 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
     try:
         container = docker_client.containers.get(TERRASLAM_CONTAINER)
         
-        # Resolve component name for supervisor
+        # Get project info
+        projects_root = get_projects_root(request)
+        project = None
+        if action.project_id:
+            project = read_project_metadata(projects_root, action.project_id)
+            if project:
+                # Set publisher mode for status check
+                mode = "folder" if project.type == "симуляция" else "realsense"
+                container.exec_run(f"bash -c \"echo '{mode}' > /tmp/terraslam_publisher_mode\"")
+
+        # Handle selective component control for "all"
+        if action.component == "all" and action.action in ["start", "restart"]:
+            if project and project.type == "симуляция":
+                target_components = ["slam_core", "relay", "image_publisher_folder"]
+                others = ["image_publisher_realsense", "rosbridge"]
+            else:
+                target_components = ["slam_core", "relay", "image_publisher_realsense", "rosbridge"]
+                others = ["image_publisher_folder"]
+            
+            # Stop components that should not be running in this mode
+            for comp in others:
+                container.exec_run(f"{SUPERVISOR_CMD} stop {comp}")
+                
+            # Perform action on target components
+            combined_output = ""
+            success = True
+            for comp in target_components:
+                # Handle path for publisher folder
+                if comp == "image_publisher_folder" and project and project.frames_path:
+                    # Write to file
+                    container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
+                    # Also try to pass as parameter if the component is already running (for ROS2)
+                    container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {project.frames_path} || true\"")
+
+                res = container.exec_run(f"{SUPERVISOR_CMD} {action.action} {comp}")
+                combined_output += res.output.decode("utf-8") + "\n"
+                if res.exit_code != 0:
+                    output_str = res.output.decode("utf-8")
+                    if "already started" not in output_str:
+                        success = False
+            
+            return CommandResponse(success=success, output=combined_output)
+
+        # Resolve single component name for supervisor
         supervisor_component = COMPONENT_MAPPING.get(action.component, action.component)
 
-        # Handle folder path for image_publisher_folder
-        if action.project_id and action.component in ["publisher", "publisher:folder", "all"]:
-            projects_root = get_projects_root(request)
-            project = read_project_metadata(projects_root, action.project_id)
+        # Handle folder path for image_publisher_folder when called individually
+        if action.project_id and action.component in ["publisher", "publisher:folder"]:
             if project and project.frames_path:
-                # Write frames path to a file that the publisher can read
                 container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
+                container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {project.frames_path} || true\"")
         
         if action.action == "status":
             result = container.exec_run(f"{SUPERVISOR_CMD} status {supervisor_component}")
@@ -133,9 +175,9 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
         output = result.output.decode("utf-8") if result.output else ""
         
         return CommandResponse(
-            success=result.exit_code == 0,
+            success=result.exit_code == 0 or "already started" in output,
             output=output,
-            error=None if result.exit_code == 0 else "Command failed"
+            error=None if (result.exit_code == 0 or "already started" in output) else f"Command failed with exit code {result.exit_code}"
         )
     except docker.errors.NotFound:
         raise HTTPException(503, "TerraSLAM container not found")
@@ -193,6 +235,7 @@ async def get_terraslam_status():
             main_components.append("image_publisher_folder")
         else:
             main_components.append("image_publisher_realsense")
+            main_components.append("rosbridge")
         
         all_running = all(
             components_status.get(comp, "") == "RUNNING" 
