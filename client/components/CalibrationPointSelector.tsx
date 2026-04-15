@@ -201,8 +201,8 @@ export function CalibrationPointSelector({
   };
 
   return (
-    <div className="flex-1 bg-slate-50 flex flex-col p-4 lg:p-6 overflow-hidden">
-      <div className="bg-white rounded-2xl max-w-7xl w-full mx-auto flex flex-col shadow-xl overflow-hidden flex-1">
+    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col p-4 lg:p-6 overflow-auto">
+      <div className="min-h-full bg-white rounded-2xl max-w-7xl w-full mx-auto flex flex-col shadow-xl overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-primary to-secondary text-white p-5 flex justify-between items-center shrink-0">
           <div>
@@ -215,9 +215,9 @@ export function CalibrationPointSelector({
         </div>
 
         {/* Content - 3 Columns */}
-        <div className="grid grid-cols-12 gap-6 p-6 overflow-hidden">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 min-h-0">
           {/* Column 1: Image (Col 1-5) */}
-          <div className="col-span-5 flex flex-col min-h-0">
+          <div className="lg:col-span-5 flex flex-col min-h-0">
             <div className="mb-3 flex justify-between items-center">
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 📷 Изображение
@@ -241,7 +241,7 @@ export function CalibrationPointSelector({
               ref={imageContainerRef}
               onClick={handleImageClick}
               className={cn(
-                "relative flex-1 rounded-xl overflow-hidden border-2 transition-all min-h-[500px] h-[500px] bg-slate-100 shadow-inner",
+                "relative rounded-xl overflow-hidden border-2 transition-all aspect-video lg:flex-1 bg-slate-100 shadow-inner",
                 currentMode === "image" ? "border-primary cursor-crosshair ring-4 ring-primary/10" : "border-slate-200"
               )}
             >
@@ -255,7 +255,7 @@ export function CalibrationPointSelector({
               <AnimatePresence>
                 {completedPoints.map((point, idx) => (
                   <motion.div
-                    key={`${point.id}-${point.imageX}-${point.imageY}`}
+                    key={point.id}
                     drag
                     dragConstraints={imageContainerRef}
                     dragMomentum={false}
@@ -288,7 +288,7 @@ export function CalibrationPointSelector({
               {/* Pending point on image */}
               {pendingPoint?.imageX && (
                 <motion.div
-                  key={`pending-${pendingPoint.id}-${pendingPoint.imageX}-${pendingPoint.imageY}`}
+                  key={pendingPoint.id}
                   drag
                   dragConstraints={imageContainerRef}
                   dragMomentum={false}
@@ -315,7 +315,7 @@ export function CalibrationPointSelector({
           </div>
 
           {/* Column 2: Map (Col 6-9) */}
-          <div className="col-span-4 flex flex-col min-h-0">
+          <div className="lg:col-span-4 flex flex-col min-h-0">
             <div className="mb-3 flex justify-between items-center">
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 🗺️ Карта
@@ -333,7 +333,7 @@ export function CalibrationPointSelector({
               </Button>
             </div>
 
-            <div className="relative flex-1 rounded-xl overflow-hidden border-2 border-slate-200 min-h-[500px] h-[500px] bg-slate-100 shadow-inner">
+            <div className="relative aspect-video lg:flex-1 rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-100 shadow-inner">
               <MapComponent
                 dronePosition={{ lat: 55.7558, lng: 37.6173 }}
                 path={completedPoints.map((p) => ({
@@ -353,7 +353,7 @@ export function CalibrationPointSelector({
           </div>
 
           {/* Column 3: Point List (Col 10-12) */}
-          <div className="col-span-3 flex flex-col min-h-0 bg-slate-50 rounded-xl border border-slate-200 p-4">
+          <div className="lg:col-span-3 flex flex-col min-h-0 bg-slate-50 rounded-xl border border-slate-200 p-4">
             <h3 className="text-sm font-semibold mb-3">Список точек</h3>
             
             <Reorder.Group 

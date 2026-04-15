@@ -11,21 +11,27 @@ class TelemetryManager:
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
         self.project_telemetry: Dict[str, dict] = {}
+        self._lock = asyncio.Lock()
     
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections.add(websocket)
+        async with self._lock:
+            self.active_connections.add(websocket)
     
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.discard(websocket)
+    async def disconnect(self, websocket: WebSocket):
+        async with self._lock:
+            self.active_connections.discard(websocket)
     
     async def broadcast(self, project_id: str, data: dict):
         message = json.dumps({"project_id": project_id, **data})
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(message)
-            except:
-                pass
+        async with self._lock:
+            # Create a copy to avoid modification during iteration
+            for connection in list(self.active_connections):
+                try:
+                    await connection.send_text(message)
+                except Exception as e:
+                    print(f"Broadcast error: {e}")
+
 
 telemetry_manager = TelemetryManager()
 
@@ -56,11 +62,12 @@ async def telemetry_websocket(websocket: WebSocket, project_id: str):
                 "timestamp": int(asyncio.get_event_loop().time() * 1000)
             }
             
-            await websocket.send_json(telemetry_data)
+            async with telemetry_manager._lock:
+                await websocket.send_json(telemetry_data)
             await asyncio.sleep(0.5)
             
     except WebSocketDisconnect:
-        telemetry_manager.disconnect(websocket)
+        await telemetry_manager.disconnect(websocket)
 
 @router.post("/start")
 async def start_telemetry(project_id: str):

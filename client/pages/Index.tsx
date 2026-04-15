@@ -46,6 +46,16 @@ export default function Index() {
         const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:8000"}/api/telemetry/ws/${project.id}`;
         const ws = new WebSocket(wsUrl);
         
+        // Wait for WebSocket to open to ensure we don't miss early progress messages
+        await new Promise((resolve) => {
+          const timeout = setTimeout(resolve, 1000); // Fallback after 1s
+          ws.onopen = () => {
+            clearTimeout(timeout);
+            console.log("✅ Telemetry WebSocket for progress connected");
+            resolve(true);
+          };
+        });
+
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
