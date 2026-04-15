@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Plus, Trash2, Eye } from "lucide-react";
 import { ProjectModal, ProjectType } from "@/components/ProjectModal";
+import { SettingsModal } from "@/components/SettingsModal";
 import { Button } from "@/components/ui/button";
 import {
   getProjects,
@@ -12,10 +13,12 @@ import {
   type Project,
 } from "@/lib/api";
 import { toast } from "sonner";
+import { Settings } from "lucide-react";
 
 export default function Index() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
@@ -110,13 +113,23 @@ export default function Index() {
               </p>
             </div>
           </div>
-          <Button
-            onClick={() => setIsModalOpen(true)}
-            className="btn-primary gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Новый проект
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsSettingsOpen(true)}
+              className="gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              Настройки
+            </Button>
+            <Button
+              onClick={() => setIsModalOpen(true)}
+              className="btn-primary gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Новый проект
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -218,6 +231,11 @@ export default function Index() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         onCreateProject={handleCreateProject}
+      />
+      
+      <SettingsModal
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
       />
     </div>
   );

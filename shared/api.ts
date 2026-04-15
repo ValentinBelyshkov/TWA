@@ -62,3 +62,41 @@ export interface GCPSaveResponse {
   gcpFilename: string;
   calibrationStatus: string;
 }
+
+// Settings types
+export type ProtocolType = "Mavlink" | "MSP" | "Ublox" | "Custom";
+export type TransmitterType = "UART" | "I2C" | "USB";
+export type SessionType = "Mono" | "Stereo" | "Mono+IMU" | "Stereo+IMU";
+
+export interface ORBExtractorSettings {
+  nFeatures: number;
+  scaleFactor: number;
+  nLevels: number;
+  iniThFAST: number;
+  minThFAST: number;
+}
+
+export interface ProtocolConfig {
+  id: string;
+  name: string;
+  baudRate?: number;
+  port?: string;
+  // Other protocol specific fields
+}
+
+export interface AppSettings {
+  protocol: ProtocolType;
+  transmitter: TransmitterType;
+  session: SessionType;
+  orbExtractor: ORBExtractorSettings;
+  protocolConfigs: Record<ProtocolType, ProtocolConfig>;
+}
+
+export interface SettingsResponse {
+  success: boolean;
+  settings: AppSettings;
+}
+
+export interface SaveSettingsRequest {
+  settings: AppSettings;
+}

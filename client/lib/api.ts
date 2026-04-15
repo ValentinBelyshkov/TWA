@@ -1,3 +1,5 @@
+import { AppSettings } from "@shared/api";
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 
 function getFullUrl(endpoint: string): string {
@@ -270,4 +272,17 @@ export async function getTerraSLAMLogs(
   const params = new URLSearchParams();
   if (lines) params.append("lines", lines.toString());
   return request(`/api/control/terraslam/logs/${component}?${params}`);
+}
+
+export async function getAppSettings(): Promise<AppSettings> {
+  return request<AppSettings>("/api/settings");
+}
+
+export async function saveAppSettings(
+  settings: AppSettings
+): Promise<{ success: boolean; settings: AppSettings }> {
+  return request("/api/settings", {
+    method: "POST",
+    body: JSON.stringify(settings),
+  });
 }

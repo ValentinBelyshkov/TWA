@@ -1,1 +1,1 @@
-from app.routers import projects, calibration, telemetry, control
+from app.routers import projects, calibration, telemetry, control, video, settings
