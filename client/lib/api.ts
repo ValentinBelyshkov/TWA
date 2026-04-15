@@ -17,6 +17,7 @@ interface ProjectBackend {
   type: string;
   created_at: string;
   video_filename: string | null;
+  frames_path: string | null;
   calibration_status: string;
 }
 
@@ -26,6 +27,7 @@ export interface Project {
   type: ProjectType;
   createdAt: Date;
   videoFilename: string | null;
+  framesPath: string | null;
   calibrationStatus: string;
 }
 
@@ -38,6 +40,7 @@ function fromBackendProject(backend: ProjectBackend): Project {
     type: backend.type as ProjectType,
     createdAt: new Date(backend.created_at),
     videoFilename: backend.video_filename,
+    framesPath: backend.frames_path,
     calibrationStatus: backend.calibration_status,
   };
 }
@@ -220,10 +223,11 @@ export interface CommandResponse {
 export async function controlTerraSLAMComponent(
   component: string,
   action: string,
+  projectId?: string,
 ): Promise<CommandResponse> {
   return request<CommandResponse>("/api/control/terraslam/component", {
     method: "POST",
-    body: JSON.stringify({ component, action }),
+    body: JSON.stringify({ component, action, project_id: projectId }),
   });
 }
 

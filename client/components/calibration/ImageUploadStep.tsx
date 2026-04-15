@@ -16,19 +16,18 @@ export function ImageUploadStep({
   onFileSelect,
 }: ImageUploadStepProps) {
   return (
-    <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="bg-white rounded-2xl border border-border shadow-lg p-12 max-w-lg w-full">
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-4xl">📷</span>
-          </div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">
-            Загрузка изображения
-          </h2>
-          <p className="text-muted-foreground">
-            Выберите изображение с дрона для калибровки
-          </p>
+    <div className="p-12 max-w-lg mx-auto w-full">
+      <div className="text-center mb-8">
+        <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <span className="text-4xl">📷</span>
         </div>
+        <h2 className="text-2xl font-bold text-foreground mb-2">
+          Загрузка изображения
+        </h2>
+        <p className="text-muted-foreground">
+          Выберите изображение с дрона для калибровки
+        </p>
+      </div>
 
         {uploadError && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -74,7 +73,6 @@ export function ImageUploadStep({
             )}
           </div>
         </div>
-      </div>
     </div>
   );
 }

@@ -6,19 +6,18 @@ interface InstructionsStepProps {
 
 export function InstructionsStep({ onNext }: InstructionsStepProps) {
   return (
-    <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="bg-white rounded-2xl border border-border shadow-lg p-12 max-w-lg w-full">
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-4xl">🔧</span>
-          </div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">
-            Калибровка системы
-          </h2>
-          <p className="text-muted-foreground">
-            Процесс калибровки состоит из нескольких этапов
-          </p>
+    <div className="p-12 max-w-lg mx-auto w-full">
+      <div className="text-center mb-8">
+        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <span className="text-4xl">🔧</span>
         </div>
+        <h2 className="text-2xl font-bold text-foreground mb-2">
+          Калибровка системы
+        </h2>
+        <p className="text-muted-foreground">
+          Процесс калибровки состоит из нескольких этапов
+        </p>
+      </div>
 
         <div className="space-y-4 mb-8">
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -96,7 +95,6 @@ export function InstructionsStep({ onNext }: InstructionsStepProps) {
           <Play className="w-4 h-4" />
           Продолжить
         </button>
-      </div>
     </div>
   );
 }

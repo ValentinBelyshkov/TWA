@@ -9,6 +9,7 @@ interface MapComponentProps {
   path?: Array<{ lat: number; lng: number }>;
   onMapClick?: (lat: number, lng: number) => void;
   selectedPoint?: { lat: number; lng: number };
+  showMarkers?: boolean;
 }
 
 // Fix for default marker icons in Leaflet - moved inside component to avoid SSR issues
@@ -37,6 +38,7 @@ export function MapComponent({
   path = [],
   onMapClick,
   selectedPoint,
+  showMarkers = true,
 }: MapComponentProps) {
   const mapId = useRef(`map-${Math.random().toString(36).substr(2, 9)}`);
   const mapRef = useRef<L.Map | null>(null);
@@ -156,18 +158,20 @@ export function MapComponent({
     pathMarkersRef.current.forEach((marker) => marker.remove());
     pathMarkersRef.current = [];
 
-    // Add new markers
-    path.forEach((p, idx) => {
-      const marker = L.marker([p.lat, p.lng], {
-        icon: L.divIcon({
-          className: "custom-path-marker",
-          html: `<div class="w-6 h-6 rounded-full border-2 border-white bg-primary shadow-lg flex items-center justify-center text-white text-[10px] font-bold">${idx + 1}</div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        }),
-      }).addTo(mapRef.current!);
-      pathMarkersRef.current.push(marker);
-    });
+    // Add new markers if showMarkers is true
+    if (showMarkers) {
+      path.forEach((p, idx) => {
+        const marker = L.marker([p.lat, p.lng], {
+          icon: L.divIcon({
+            className: "custom-path-marker",
+            html: `<div class="w-6 h-6 rounded-full border-2 border-white bg-primary shadow-lg flex items-center justify-center text-white text-[10px] font-bold">${idx + 1}</div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          }),
+        }).addTo(mapRef.current!);
+        pathMarkersRef.current.push(marker);
+      });
+    }
 
     if (pathPolylineRef.current) {
       const pathCoords = path.map((p) => [p.lat, p.lng] as [number, number]);
@@ -183,7 +187,7 @@ export function MapComponent({
 
       pathPolylineRef.current = polyline;
     }
-  }, [path]);
+  }, [path, showMarkers]);
 
   // Update selected point marker
   useEffect(() => {

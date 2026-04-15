@@ -7,6 +7,7 @@ from pathlib import Path
 import uuid
 import shutil
 import json
+import subprocess
 
 from fastapi.encoders import jsonable_encoder
 
@@ -22,11 +23,13 @@ class ProjectBase(BaseModel):
 
 class ProjectCreate(ProjectBase):
     video_filename: Optional[str] = None
+    frames_path: Optional[str] = None
 
 class Project(ProjectBase):
     id: str
     created_at: datetime
     video_filename: Optional[str] = None
+    frames_path: Optional[str] = None
     calibration_status: str = "not_calibrated"
 
 def ensure_projects_directory(projects_root: Path):
@@ -154,6 +157,30 @@ async def upload_video(request: Request, project_id: str, file: UploadFile = Fil
         f.write(content)
     
     project.video_filename = str(save_path)
+    
+    # Extract frames: every 3rd frame
+    frames_dir = project_path / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Clear frames dir if it exists and has files
+    for old_frame in frames_dir.glob("*.jpg"):
+        old_frame.unlink()
+
+    input_file = str(save_path)
+    output_pattern = str(frames_dir / "frame_%04d.jpg")
+    
+    try:
+        subprocess.run([
+            "ffmpeg", "-i", input_file, 
+            "-vf", "select='not(mod(n,3))'", 
+            "-vsync", "vfr", 
+            "-q:v", "2", 
+            output_pattern
+        ], check=True, capture_output=True)
+        project.frames_path = str(frames_dir)
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg error: {e.stderr.decode() if e.stderr else str(e)}")
+    
     write_project_metadata(projects_root, project)
     
-    return {"message": "Video uploaded", "filename": str(save_path)}
+    return {"message": "Video uploaded and processed", "filename": str(save_path), "frames_path": project.frames_path}

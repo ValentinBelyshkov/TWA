@@ -31,12 +31,26 @@ export function CalibrationWorkflow({
   onUploadErrorDismiss,
   projectId,
 }: CalibrationWorkflowProps) {
+  const wrapOverlay = (content: React.ReactNode) => (
+    <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-auto bg-white rounded-2xl shadow-2xl relative">
+        <button
+          onClick={onCalibrationCancel}
+          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground z-10"
+        >
+          ✕
+        </button>
+        {content}
+      </div>
+    </div>
+  );
+
   if (step === "instructions") {
-    return <InstructionsStep onNext={onInstructionsNext} />;
+    return wrapOverlay(<InstructionsStep onNext={onInstructionsNext} />);
   }
 
   if (step === "upload") {
-    return (
+    return wrapOverlay(
       <ImageUploadStep
         onUpload={onImageUpload}
         uploadError={uploadError}

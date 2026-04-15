@@ -24,12 +24,14 @@ interface ProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreateProject: (name: string, type: ProjectType, videoFile?: File) => void;
+  isLoading?: boolean;
 }
 
 export function ProjectModal({
   open,
   onOpenChange,
   onCreateProject,
+  isLoading,
 }: ProjectModalProps) {
   const [projectName, setProjectName] = useState("");
   const [projectType, setProjectType] = useState<ProjectType | "">("");
@@ -81,7 +83,13 @@ export function ProjectModal({
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        {step === "type" ? (
+        {isLoading ? (
+          <div className="py-12 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="font-semibold text-foreground">Загрузка и обработка видео...</p>
+            <p className="text-sm text-muted-foreground mt-2">Пожалуйста, подождите, идет нарезка кадров</p>
+          </div>
+        ) : step === "type" ? (
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="project-name">Название проекта</Label>
@@ -133,23 +141,25 @@ export function ProjectModal({
         )}
 
         <div className="flex gap-2 justify-end">
-          <AlertDialogCancel onClick={handleReset}>Отмена</AlertDialogCancel>
-          {step === "type" ? (
-            <Button
-              onClick={handleNext}
-              disabled={!projectName || !projectType}
-            >
-              {projectType === "симуляция" ? "Далее" : "Создать"}
-            </Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => setStep("type")}>
-                Назад
+          <AlertDialogCancel onClick={handleReset} disabled={isLoading}>Отмена</AlertDialogCancel>
+          {!isLoading && (
+            step === "type" ? (
+              <Button
+                onClick={handleNext}
+                disabled={!projectName || !projectType}
+              >
+                {projectType === "симуляция" ? "Далее" : "Создать"}
               </Button>
-              <Button onClick={handleCreate} disabled={!videoFile}>
-                Создать
-              </Button>
-            </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setStep("type")}>
+                  Назад
+                </Button>
+                <Button onClick={handleCreate} disabled={!videoFile}>
+                  Создать
+                </Button>
+              </>
+            )
           )}
         </div>
       </AlertDialogContent>
