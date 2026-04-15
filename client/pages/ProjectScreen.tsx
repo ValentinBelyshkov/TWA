@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TelemetryBar } from "@/components/TelemetryBar";
 import { Button } from "@/components/ui/button";
@@ -7,10 +8,12 @@ import { useProject } from "@/hooks/useProject";
 import { ProjectHeader } from "@/components/ProjectHeader";
 import { CalibrationWorkflow } from "@/components/calibration/CalibrationWorkflow";
 import { OperationScreen } from "@/components/operation/OperationScreen";
+import { SettingsModal } from "@/components/SettingsModal";
 
 export default function ProjectScreen() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const {
     project,
@@ -71,7 +74,11 @@ export default function ProjectScreen() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <ProjectHeader project={project} onBack={() => navigate("/")} />
+      <ProjectHeader 
+        project={project} 
+        onBack={() => navigate("/")} 
+        onSettingsClick={() => setIsSettingsOpen(true)}
+      />
 
       <TelemetryBar data={telemetry} />
 
@@ -105,6 +112,11 @@ export default function ProjectScreen() {
           systemStatus={systemStatus}
         />
       )}
+
+      <SettingsModal
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+      />
     </div>
   );
 }

@@ -4,9 +4,10 @@ import type { Project } from "@/lib/api";
 interface ProjectHeaderProps {
   project: Project;
   onBack: () => void;
+  onSettingsClick?: () => void;
 }
 
-export function ProjectHeader({ project, onBack }: ProjectHeaderProps) {
+export function ProjectHeader({ project, onBack, onSettingsClick }: ProjectHeaderProps) {
   return (
     <header className="bg-white border-b border-border px-6 py-4 flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -27,7 +28,10 @@ export function ProjectHeader({ project, onBack }: ProjectHeaderProps) {
           </p>
         </div>
       </div>
-      <button className="p-2 hover:bg-muted rounded-lg transition-colors">
+      <button 
+        onClick={onSettingsClick}
+        className="p-2 hover:bg-muted rounded-lg transition-colors"
+      >
         <Settings className="w-6 h-6 text-foreground" />
       </button>
     </header>
