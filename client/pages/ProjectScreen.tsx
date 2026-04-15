@@ -94,6 +94,7 @@ export default function ProjectScreen() {
           hasVideoStream={hasVideoStream}
           videoCanvasRef={videoCanvasRef}
           gpsStatus={gpsStatus}
+          projectType={project?.type}
           systemStatus={systemStatus}
         />
       ) : (

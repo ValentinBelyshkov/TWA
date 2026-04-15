@@ -13,6 +13,7 @@ interface OperationScreenProps {
   hasVideoStream: boolean;
   videoCanvasRef: RefObject<HTMLCanvasElement | null>; 
   gpsStatus?: GPSStatus;
+  projectType?: string;
   systemStatus?: {
     status: "working" | "warning" | "not_working" | "error";
     publisher_mode: string;
@@ -31,6 +32,7 @@ export function OperationScreen({
   hasVideoStream,
   videoCanvasRef,
   gpsStatus,
+  projectType,
   systemStatus,
 }: OperationScreenProps) {
 
@@ -148,7 +150,11 @@ export function OperationScreen({
             {systemStatus && (
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Режим:</span>
-                <span className="font-medium">{systemStatus.publisher_mode === "folder" ? "Симуляция (папка)" : "Камера (RealSense)"}</span>
+                <span className="font-medium">
+                  {systemStatus.publisher_mode === "folder" || projectType === "симуляция" 
+                    ? "Симуляция (видео)" 
+                    : "Камера (RealSense)"}
+                </span>
               </div>
             )}
             <div className="flex justify-between">
