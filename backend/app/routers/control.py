@@ -81,6 +81,7 @@ async def disarm_drone(project_id: str):
 TERRASLAM_CONTAINER = "TerraSLAM"
 SUPERVISOR_SOCKET = "/tmp/supervisor.sock"
 SUPERVISOR_CMD = f"/usr/bin/supervisorctl -s unix://{SUPERVISOR_SOCKET}"
+SUPERVISOR_CONF_PATH = "/etc/supervisor/conf.d/terraslam.conf"
 
 # Component mappings (matches control.sh)
 COMPONENT_MAPPING = {
@@ -100,12 +101,66 @@ LOG_NAMES = {
     "image_publisher_realsense": "publisher_realsense",
 }
 
+# Process patterns for killing orphaned processes (matches control.sh)
+PROCESS_PATTERNS = {
+    "slam": "orb_slam3|slam_core|rgbd|mono",
+    "relay": "relay.py",
+    "publisher": "image_publish.py",
+    "publisher:folder": "image_publish.py.*folder",
+    "publisher:realsense": "realsense.py",
+}
+
+def kill_processes(container, component: str):
+    """Force kill orphaned processes for a component."""
+    pattern = PROCESS_PATTERNS.get(component)
+    if not pattern and ":" in component:
+        pattern = PROCESS_PATTERNS.get(component.split(":")[0])
+    
+    if not pattern:
+        return
+    
+    # Find PIDs
+    find_cmd = f"ps aux | grep -E '{pattern}' | grep -v grep | awk '{{print $2}}'"
+    res = container.exec_run(f"bash -c \"{find_cmd}\"")
+    pids = res.output.decode().strip()
+    
+    if pids:
+        pids_list = pids.split()
+        pids_str = " ".join(pids_list)
+        container.exec_run(f"bash -c \"kill -9 {pids_str}\"")
+
+def set_publisher_folder_path(container, new_path: str):
+    """Update VIDEO_FOLDER in supervisor config for simulation mode."""
+    # Check if directory exists
+    res = container.exec_run(f"test -d {new_path}")
+    if res.exit_code != 0:
+        return False, f"Directory '{new_path}' does not exist inside container!"
+    
+    escaped_new = new_path.replace("/", "\\/")
+    
+    # Update supervisor config using sed (same as control.sh)
+    sed_cmd = (
+        f"sed -i '/\\[program:image_publisher_folder\\]/,/^\\[/ {{"
+        f"/^environment=/ s/VIDEO_FOLDER=\"[^\"]*\"/VIDEO_FOLDER=\"{escaped_new}\"/"
+        f"}}' {SUPERVISOR_CONF_PATH}"
+    )
+    
+    # Make backup and apply sed
+    res = container.exec_run(f"bash -c \"cp {SUPERVISOR_CONF_PATH} {SUPERVISOR_CONF_PATH}.bak && {sed_cmd}\"")
+    
+    if res.exit_code == 0:
+        # Tell supervisor to reread and update
+        container.exec_run(f"{SUPERVISOR_CMD} reread")
+        container.exec_run(f"{SUPERVISOR_CMD} update image_publisher_folder")
+        return True, "Path updated successfully"
+    else:
+        return False, f"Failed to update config: {res.output.decode()}"
 
 @router.post("/terraslam/component")
 async def control_terraslam_component(action: ComponentAction, request: Request) -> CommandResponse:
     """Control TerraSLAM components (slam, relay, publisher, all)."""
     valid_components = ["slam", "relay", "publisher", "all", "publisher:folder", "publisher:realsense", "rosbridge"]
-    valid_actions = ["start", "stop", "restart", "status"]
+    valid_actions = ["start", "stop", "restart", "status", "kill"]
     
     if action.component not in valid_components:
         raise HTTPException(400, f"Invalid component: {action.component}")
@@ -125,6 +180,15 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
                 mode = "folder" if project.type == "симуляция" else "realsense"
                 container.exec_run(f"bash -c \"echo '{mode}' > /tmp/terraslam_publisher_mode\"")
 
+        # Handle kill action
+        if action.action == "kill":
+            if action.component == "all":
+                for comp in ["slam", "relay", "publisher"]:
+                    kill_processes(container, comp)
+            else:
+                kill_processes(container, action.component)
+            return CommandResponse(success=True, output=f"Processes for {action.component} killed")
+
         # Handle selective component control for "all"
         if action.component == "all" and action.action in ["start", "restart"]:
             if project and project.type == "симуляция":
@@ -137,6 +201,7 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
             # Stop components that should not be running in this mode
             for comp in others:
                 container.exec_run(f"{SUPERVISOR_CMD} stop {comp}")
+                kill_processes(container, comp)
                 
             # Perform action on target components
             combined_output = ""
@@ -144,11 +209,14 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
             for comp in target_components:
                 # Handle path for publisher folder
                 if comp == "image_publisher_folder" and project and project.frames_path:
-                    # Write to file
+                    set_publisher_folder_path(container, project.frames_path)
+                    # Also keep the old way for compatibility with current ROS node if it's already running
                     container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
-                    # Also try to pass as parameter if the component is already running (for ROS2)
                     container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {project.frames_path} || true\"")
 
+                # Kill before start if restarting or starting
+                kill_processes(container, comp)
+                
                 res = container.exec_run(f"{SUPERVISOR_CMD} {action.action} {comp}")
                 combined_output += res.output.decode("utf-8") + "\n"
                 if res.exit_code != 0:
@@ -164,14 +232,21 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
         # Handle folder path for image_publisher_folder when called individually
         if action.project_id and action.component in ["publisher", "publisher:folder"]:
             if project and project.frames_path:
+                set_publisher_folder_path(container, project.frames_path)
                 container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
                 container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {project.frames_path} || true\"")
         
+        if action.action in ["start", "restart"]:
+            kill_processes(container, action.component)
+
         if action.action == "status":
             result = container.exec_run(f"{SUPERVISOR_CMD} status {supervisor_component}")
         else:
             result = container.exec_run(f"{SUPERVISOR_CMD} {action.action} {supervisor_component}")
         
+        if action.action == "stop":
+            kill_processes(container, action.component)
+
         output = result.output.decode("utf-8") if result.output else ""
         
         return CommandResponse(
