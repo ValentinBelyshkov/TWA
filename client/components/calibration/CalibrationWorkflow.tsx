@@ -32,15 +32,15 @@ export function CalibrationWorkflow({
   projectId,
 }: CalibrationWorkflowProps) {
   const wrapOverlay = (content: React.ReactNode) => (
-    <div className="flex-1 bg-slate-50 flex flex-col p-4 lg:p-6 overflow-hidden">
-      <div className="flex-1 w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl relative overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col p-4 lg:p-6 overflow-auto">
+      <div className="min-h-full w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl relative overflow-hidden flex flex-col">
         <button
           onClick={onCalibrationCancel}
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground z-10 p-2 hover:bg-slate-100 rounded-full transition-colors"
         >
           <span className="text-xl">✕</span>
         </button>
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1">
           {content}
         </div>
       </div>
