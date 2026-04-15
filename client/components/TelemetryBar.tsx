@@ -76,7 +76,7 @@ export function TelemetryBar({ data, className }: TelemetryBarProps) {
   return (
     <div
       className={cn(
-        "w-full bg-white border-b border-border px-4 py-3 shadow-sm",
+        "w-full bg-white border-b border-border px-4 py-3 shadow-sm sticky top-0 z-[1100]",
         className,
       )}
     >

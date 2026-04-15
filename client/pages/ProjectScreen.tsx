@@ -82,21 +82,21 @@ export default function ProjectScreen() {
 
       <TelemetryBar data={telemetry} />
 
-      <OperationScreen
-        isRecording={isRecording}
-        onStartRecording={startRecording}
-        onStopRecording={stopRecording}
-        dronePosition={dronePosition}
-        dronePath={dronePath}
-        showCalibration={showCalibration}
-        onCalibrate={handleCalibrate}
-        hasVideoStream={hasVideoStream}
-        videoCanvasRef={videoCanvasRef}
-        gpsStatus={gpsStatus}
-        systemStatus={systemStatus}
-      />
-
-      {calibrationStep !== "complete" && calibrationStep !== "idle" && (
+      {calibrationStep === "idle" || calibrationStep === "complete" ? (
+        <OperationScreen
+          isRecording={isRecording}
+          onStartRecording={startRecording}
+          onStopRecording={stopRecording}
+          dronePosition={dronePosition}
+          dronePath={dronePath}
+          showCalibration={showCalibration}
+          onCalibrate={handleCalibrate}
+          hasVideoStream={hasVideoStream}
+          videoCanvasRef={videoCanvasRef}
+          gpsStatus={gpsStatus}
+          systemStatus={systemStatus}
+        />
+      ) : (
         <CalibrationWorkflow
           step={calibrationStep}
           uploadedImage={uploadedImage}
