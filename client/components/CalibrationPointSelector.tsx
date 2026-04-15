@@ -66,8 +66,8 @@ export function CalibrationPointSelector({
     if (pendingPoint?.imageX && currentMode === "map") return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = Math.round(e.clientX - rect.left);
+    const y = Math.round(e.clientY - rect.top);
 
     setCurrentMode("map");
     setPendingPoint({
@@ -262,8 +262,8 @@ export function CalibrationPointSelector({
                     onDragEnd={(_, info) => {
                       const rect = imageContainerRef.current?.getBoundingClientRect();
                       if (rect) {
-                        const x = info.point.x - rect.left;
-                        const y = info.point.y - rect.top;
+                        const x = Math.round(info.point.x - rect.left);
+                        const y = Math.round(info.point.y - rect.top);
                         updatePointPosition(point.id, x, y);
                       }
                     }}
@@ -271,7 +271,7 @@ export function CalibrationPointSelector({
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
                     exit={{ scale: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: 0 }}
                     className="absolute w-8 h-8 rounded-full border-2 border-white bg-primary shadow-lg cursor-grab active:cursor-grabbing z-10 flex items-center justify-center text-white text-xs font-bold -ml-4 -mt-4"
                     style={{
                       left: point.imageX,
@@ -294,8 +294,8 @@ export function CalibrationPointSelector({
                   onDragEnd={(_, info) => {
                     const rect = imageContainerRef.current?.getBoundingClientRect();
                     if (rect) {
-                      const x = info.point.x - rect.left;
-                      const y = info.point.y - rect.top;
+                      const x = Math.round(info.point.x - rect.left);
+                      const y = Math.round(info.point.y - rect.top);
                       updatePendingPointPosition(x, y);
                     }
                   }}
