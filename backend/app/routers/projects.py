@@ -158,7 +158,7 @@ async def upload_video(request: Request, project_id: str, file: UploadFile = Fil
     
     project.video_filename = str(save_path)
     
-    # Extract frames: every 3rd frame
+    # Extract frames: 1 frame per second
     frames_dir = project_path / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     
@@ -172,8 +172,7 @@ async def upload_video(request: Request, project_id: str, file: UploadFile = Fil
     try:
         subprocess.run([
             "ffmpeg", "-i", input_file, 
-            "-vf", "select='not(mod(n,3))'", 
-            "-vsync", "vfr", 
+            "-vf", "fps=1", 
             "-q:v", "2", 
             output_pattern
         ], check=True, capture_output=True)

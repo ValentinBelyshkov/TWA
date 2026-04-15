@@ -48,7 +48,6 @@ export function useProject(projectId: string | undefined) {
     battery: 100,
     status: "idle",
   });
-  const [showCalibration, setShowCalibration] = useState(true);
   const [calibrationStep, setCalibrationStep] = useState<CalibrationStep>("idle");
   const [uploadedImage, setUploadedImage] = useState<{
     filename: string;
@@ -91,10 +90,11 @@ export function useProject(projectId: string | undefined) {
     enabled: !!projectId,
   });
 
+  const isCalibrated = project?.calibrationStatus === "calibrated";
+  const showCalibration = project ? !isCalibrated : true;
+
   useEffect(() => {
     if (project) {
-      const isCalibrated = project.calibrationStatus === "calibrated";
-      setShowCalibration(!isCalibrated);
       if (isCalibrated) {
         setCalibrationStep("complete");
       } else if (calibrationStep === "complete") {
@@ -102,7 +102,7 @@ export function useProject(projectId: string | undefined) {
         setCalibrationStep("idle");
       }
     }
-  }, [project]);
+  }, [project, isCalibrated]);
 
   // Poll TerraSLAM system status
   useEffect(() => {
@@ -363,7 +363,6 @@ export function useProject(projectId: string | undefined) {
         );
         await refetch();
         setCalibrationStep("complete");
-        setShowCalibration(false);
         setTelemetry((prev) => ({ ...prev, status: "active" }));
       } catch (err) {
         alert(err instanceof Error ? err.message : "Ошибка сохранения точек");
