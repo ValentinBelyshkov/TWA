@@ -34,6 +34,8 @@ export default function ProjectScreen() {
     stopRecording,
     handleCalibrate,
     handleInstructionsNext,
+    handleTestRunSuccess,
+    handleTestRunBack,
     handleImageUpload,
     handleCalibrationComplete,
     handleCalibrationCancel,
@@ -104,6 +106,8 @@ export default function ProjectScreen() {
           uploadError={uploadError}
           isUploading={isUploading}
           onInstructionsNext={handleInstructionsNext}
+          onTestRunSuccess={handleTestRunSuccess}
+          onTestRunBack={handleTestRunBack}
           onImageUpload={handleImageUpload}
           onCalibrationComplete={handleCalibrationComplete}
           onCalibrationCancel={handleCalibrationCancel}

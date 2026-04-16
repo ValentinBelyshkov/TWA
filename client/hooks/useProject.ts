@@ -10,7 +10,7 @@ import {
 } from "@/lib/api";
 import type { CalibrationPoint } from "@/components/CalibrationPointSelector";
 
-export type CalibrationStep = "idle" | "instructions" | "upload" | "pairing" | "complete";
+export type CalibrationStep = "idle" | "instructions" | "test-run" | "upload" | "pairing" | "complete";
 
 export interface TelemetryData {
   height: number;
@@ -317,7 +317,15 @@ export function useProject(projectId: string | undefined) {
   }, []);
 
   const handleInstructionsNext = useCallback(() => {
+    setCalibrationStep("test-run");
+  }, []);
+
+  const handleTestRunSuccess = useCallback(() => {
     setCalibrationStep("upload");
+  }, []);
+
+  const handleTestRunBack = useCallback(() => {
+    setCalibrationStep("instructions");
   }, []);
 
   const handleImageUpload = useCallback(
@@ -399,6 +407,8 @@ export function useProject(projectId: string | undefined) {
     stopRecording,
     handleCalibrate,
     handleInstructionsNext,
+    handleTestRunSuccess,
+    handleTestRunBack,
     handleImageUpload,
     handleCalibrationComplete,
     handleCalibrationCancel,
