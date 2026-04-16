@@ -2,10 +2,13 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Literal, Optional
 import docker
+import asyncio
+from pathlib import Path
 
 from app.routers.projects import (
     get_projects_root,
     read_project_metadata,
+    get_project_path,
 )
 
 router = APIRouter()
@@ -328,10 +331,11 @@ async def terraslam_health():
         
         
 @router.post("/terraslam/slam/test-run")
-async def slam_test_run(project_id: Optional[str] = None):
+async def slam_test_run(request: Request, project_id: Optional[str] = None):
     """
     Запускает SLAM, ждёт 10 секунд, потом автоматически останавливает.
     Удобно для тестов инициализации.
+    Проверяет наличие .osa файла после завершения.
     """
     try:
         container = docker_client.containers.get(TERRASLAM_CONTAINER)
@@ -350,6 +354,20 @@ async def slam_test_run(project_id: Optional[str] = None):
         stop_result = container.exec_run(f"{SUPERVISOR_CMD} stop {slam_component}")
         
         output = f"Started: {start_result.output.decode('utf-8')}\nStopped: {stop_result.output.decode('utf-8')}"
+        
+        # 4. Проверяем .osa файл
+        if project_id:
+            projects_root = get_projects_root(request)
+            project_path = get_project_path(projects_root, project_id)
+            calibrations_dir = project_path / "calibrations"
+            
+            osa_files = list(calibrations_dir.glob("*.osa"))
+            if not osa_files:
+                return CommandResponse(
+                    success=False,
+                    output=output,
+                    error="Файл .osa не найден. Инициализация SLAM не удалась."
+                )
         
         return CommandResponse(
             success=stop_result.exit_code == 0,

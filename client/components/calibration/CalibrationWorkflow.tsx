@@ -1,6 +1,7 @@
 import type { CalibrationStep } from "@/hooks/useProject";
 import { InstructionsStep } from "./InstructionsStep";
 import { ImageUploadStep } from "./ImageUploadStep";
+import { TestRunStep } from "./TestRunStep";
 import {
   CalibrationPointSelector,
   type CalibrationPoint,
@@ -12,6 +13,8 @@ interface CalibrationWorkflowProps {
   uploadError: string | null;
   isUploading: boolean;
   onInstructionsNext: () => void;
+  onTestRunSuccess: () => void;
+  onTestRunBack: () => void;
   onImageUpload: (file: File) => void;
   onCalibrationComplete: (points: CalibrationPoint[]) => void;
   onCalibrationCancel: () => void;
@@ -25,6 +28,8 @@ export function CalibrationWorkflow({
   uploadError,
   isUploading,
   onInstructionsNext,
+  onTestRunSuccess,
+  onTestRunBack,
   onImageUpload,
   onCalibrationComplete,
   onCalibrationCancel,
@@ -63,6 +68,16 @@ export function CalibrationWorkflow({
           </button>
         </div>
       </div>
+    );
+  }
+
+  if (step === "test-run" && projectId) {
+    return wrapOverlay(
+      <TestRunStep
+        projectId={projectId}
+        onSuccess={onTestRunSuccess}
+        onBack={onTestRunBack}
+      />
     );
   }
 
