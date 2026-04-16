@@ -1,8 +1,13 @@
 FROM python:3.10-slim
 
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+    
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 && \
+    apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libsm6 \

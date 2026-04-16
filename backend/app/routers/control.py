@@ -325,3 +325,38 @@ async def terraslam_health():
         return {"status": "unhealthy", "container_status": "not_found"}
     except Exception:
         return {"status": "unhealthy", "container_status": "error"}
+        
+        
+@router.post("/terraslam/slam/test-run")
+async def slam_test_run(project_id: Optional[str] = None):
+    """
+    Запускает SLAM, ждёт 10 секунд, потом автоматически останавливает.
+    Удобно для тестов инициализации.
+    """
+    try:
+        container = docker_client.containers.get(TERRASLAM_CONTAINER)
+        
+        # 1. Запускаем slam
+        slam_component = COMPONENT_MAPPING["slam"]  # "slam_core"
+        start_result = container.exec_run(f"{SUPERVISOR_CMD} start {slam_component}")
+        
+        if start_result.exit_code != 0 and "already started" not in start_result.output.decode("utf-8"):
+            raise Exception(f"Failed to start SLAM: {start_result.output.decode('utf-8')}")
+        
+        # 2. Ждём 10 секунд (не блокируя сервер)
+        await asyncio.sleep(10)
+        
+        # 3. Останавливаем slam
+        stop_result = container.exec_run(f"{SUPERVISOR_CMD} stop {slam_component}")
+        
+        output = f"Started: {start_result.output.decode('utf-8')}\nStopped: {stop_result.output.decode('utf-8')}"
+        
+        return CommandResponse(
+            success=stop_result.exit_code == 0,
+            output=output
+        )
+        
+    except docker.errors.NotFound:
+        raise HTTPException(503, "TerraSLAM container not found")
+    except Exception as e:
+        raise HTTPException(500, f"Error in test-run: {str(e)}")

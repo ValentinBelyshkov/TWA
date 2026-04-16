@@ -1,0 +1,9 @@
+{
+  "name": "123",
+  "type": "симуляция",
+  "id": "230984e5-2396-440d-a1bf-a6a8e272140a",
+  "created_at": "2026-04-15T12:39:58.415258",
+  "video_filename": "/app/projects/230984e5-2396-440d-a1bf-a6a8e272140a/videos/ebal2.mp4",
+  "frames_path": "/app/projects/230984e5-2396-440d-a1bf-a6a8e272140a/frames",
+  "calibration_status": "calibrated"
+}
