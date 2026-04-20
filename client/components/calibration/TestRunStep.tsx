@@ -1,16 +1,23 @@
-import { useState } from "react";
-import { Play, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useState, type RefObject } from "react";
+import { Play, AlertCircle, CheckCircle2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { VideoFeed } from "@/components/VideoFeed";
 
 interface TestRunStepProps {
   projectId: string;
   onSuccess: () => void;
   onBack: () => void;
+  hasVideoStream: boolean;
+  videoCanvasRef: RefObject<HTMLCanvasElement | null>;
 }
 
-export function TestRunStep({ projectId, onSuccess, onBack }: TestRunStepProps) {
+export function TestRunStep({ 
+  projectId, 
+  onSuccess, 
+  onBack,
+  hasVideoStream,
+  videoCanvasRef
+}: TestRunStepProps) {
   const [isTestRunning, setIsTestRunning] = useState(false);
   const [testRunError, setTestRunError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -49,7 +56,23 @@ export function TestRunStep({ projectId, onSuccess, onBack }: TestRunStepProps) 
       </div>
 
       <div className="flex-1 min-h-[400px] rounded-xl overflow-hidden border-2 border-slate-200 shadow-inner bg-black relative">
-        <VideoFeed projectId={projectId} />
+        {/* Video Canvas */}
+        <canvas
+          ref={videoCanvasRef}
+          className={`absolute inset-0 w-full h-full object-contain ${hasVideoStream ? 'opacity-100' : 'opacity-0'}`}
+          style={{ imageRendering: 'pixelated' }}
+        />
+
+        {/* Placeholder when no video */}
+        {!hasVideoStream && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+            <div className="text-center">
+              <Video className="w-16 h-16 text-white/30 mx-auto mb-4" />
+              <p className="text-white/50 text-sm">Видеопоток с камеры дрона</p>
+              <p className="text-white/40 text-xs mt-2">Ожидание подключения...</p>
+            </div>
+          </div>
+        )}
         
         {isSuccess && (
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-20 animate-in fade-in duration-500">

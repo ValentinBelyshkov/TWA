@@ -106,7 +106,7 @@ export function useProject(projectId: string | undefined) {
 
   // Poll TerraSLAM system status
   useEffect(() => {
-    if (!projectId || (calibrationStep !== "complete" && calibrationStep !== "idle")) return;
+    if (!projectId) return;
 
     const fetchStatus = async () => {
       try {
@@ -132,11 +132,11 @@ export function useProject(projectId: string | undefined) {
     // Poll every 3 seconds
     const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
-  }, [projectId, calibrationStep]);
+  }, [projectId]);
 
   // Video WebSocket (existing)
   useEffect(() => {
-    if (!projectId || (calibrationStep !== "complete" && calibrationStep !== "idle")) return;
+    if (!projectId) return;
 
     const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:8000"}/api/video/ws/${projectId}`;
     const ws = new WebSocket(wsUrl);
@@ -192,11 +192,11 @@ export function useProject(projectId: string | undefined) {
       ws.close();
       wsRef.current = null;
     };
-  }, [projectId, calibrationStep]);
+  }, [projectId]);
 
   // NEW: GPS WebSocket with 1-second timeout
   useEffect(() => {
-    if (!projectId || (calibrationStep !== "complete" && calibrationStep !== "idle")) return;
+    if (!projectId) return;
 
     const connectGPS = () => {
       // Connect directly to rosbridge (not through backend)
@@ -277,7 +277,7 @@ export function useProject(projectId: string | undefined) {
         gpsWsRef.current = null;
       }
     };
-  }, [projectId, calibrationStep, isRecording]);
+  }, [projectId, isRecording]);
 
   const startRecording = useCallback(async () => {
     try {

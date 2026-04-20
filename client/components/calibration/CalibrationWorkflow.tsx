@@ -6,6 +6,7 @@ import {
   CalibrationPointSelector,
   type CalibrationPoint,
 } from "@/components/CalibrationPointSelector";
+import type { RefObject } from "react";
 
 interface CalibrationWorkflowProps {
   step: CalibrationStep;
@@ -20,6 +21,8 @@ interface CalibrationWorkflowProps {
   onCalibrationCancel: () => void;
   onUploadErrorDismiss: () => void;
   projectId?: string;
+  hasVideoStream: boolean;
+  videoCanvasRef: RefObject<HTMLCanvasElement | null>;
 }
 
 export function CalibrationWorkflow({
@@ -35,6 +38,8 @@ export function CalibrationWorkflow({
   onCalibrationCancel,
   onUploadErrorDismiss,
   projectId,
+  hasVideoStream,
+  videoCanvasRef,
 }: CalibrationWorkflowProps) {
   const wrapOverlay = (content: React.ReactNode) => (
     <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col overflow-auto">
@@ -77,6 +82,8 @@ export function CalibrationWorkflow({
         projectId={projectId}
         onSuccess={onTestRunSuccess}
         onBack={onTestRunBack}
+        hasVideoStream={hasVideoStream}
+        videoCanvasRef={videoCanvasRef}
       />
     );
   }
