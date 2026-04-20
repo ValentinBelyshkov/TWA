@@ -113,6 +113,8 @@ export default function ProjectScreen() {
           onCalibrationCancel={handleCalibrationCancel}
           onUploadErrorDismiss={clearUploadError}
           projectId={projectId}
+          hasVideoStream={hasVideoStream}
+          videoCanvasRef={videoCanvasRef}
         />
       )}
 
