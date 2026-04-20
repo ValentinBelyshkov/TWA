@@ -3,8 +3,10 @@ from pydantic import BaseModel
 from typing import Literal, Optional
 import docker
 import asyncio
+import os
 from pathlib import Path
-
+from ..utils.yaml_editor import update_slam_yaml
+from ..utils.slam_publisher import start_image_publisher, stop_image_publisher
 from app.routers.projects import (
     get_projects_root,
     read_project_metadata,
@@ -81,6 +83,7 @@ async def disarm_drone(project_id: str):
 
 
 # TerraSLAM component control
+SLAM_DB = "/home/orb/Database" 
 TERRASLAM_CONTAINER = "TerraSLAM"
 SUPERVISOR_SOCKET = "/tmp/supervisor.sock"
 SUPERVISOR_CMD = f"/usr/bin/supervisorctl -s unix://{SUPERVISOR_SOCKET}"
@@ -333,45 +336,82 @@ async def terraslam_health():
 @router.post("/terraslam/slam/test-run")
 async def slam_test_run(request: Request, project_id: Optional[str] = None):
     """
-    Запускает SLAM, ждёт 10 секунд, потом автоматически останавливает.
-    Удобно для тестов инициализации.
-    Проверяет наличие .osa файла после завершения.
+    Запускает SLAM с чистой картой, ждёт 10 секунд, останавливает.
+    Перед запуском обновляет real.yaml: комментирует Load, устанавливает Save.
     """
     try:
-        container = docker_client.containers.get(TERRASLAM_CONTAINER)
+        # === 🔥 ШАГ 0: Обновляем YAML в общей папке ===
+        # Путь к real.yaml в shared volume /Database
+        # (настройте под ваш docker-compose volume mount)
+        SHARED_DATABASE_PATH = "/app/trajectory-db"  # ← путь внутри контейнера бэкенда
+        yaml_file = os.path.join(SHARED_DATABASE_PATH, "real.yaml")
         
-        # 1. Запускаем slam
-        slam_component = COMPONENT_MAPPING["slam"]  # "slam_core"
+        # Генерируем уникальное имя для сохранения (чтобы не перезаписывать)
+        import time
+        save_name = f"test-run-{int(time.time())}"
+        
+        yaml_ok = update_slam_yaml(
+            yaml_path=yaml_file,
+            save_filename=save_name,
+            comment_load=True
+        )
+        if not yaml_ok:
+            raise Exception(f"Failed to update {yaml_file}")
+        
+        # === ШАГ 1: Запускаем SLAM (как было) ===
+        container = docker_client.containers.get(TERRASLAM_CONTAINER)
+        slam_component = COMPONENT_MAPPING["slam"]
         start_result = container.exec_run(f"{SUPERVISOR_CMD} start {slam_component}")
+        print(start_result)
+        if project_id:
+            projects_root = get_projects_root(request)
+            project_path = get_project_path(projects_root, project_id)
+            # 🔥 Критично: путь должен быть виден из TerraSLAM, т.е. через общий том
+            frames_dir_slam = f"{SLAM_DB}/projects/{project_id}/frames"
+        else:
+            raise Exception(f"Unknown project_id: {project_id}")
+        publisher_ok = await start_image_publisher(
+    container=container,
+    frames_dir=frames_dir_slam,
+    video_folder_env=frames_dir_slam
+)
         
         if start_result.exit_code != 0 and "already started" not in start_result.output.decode("utf-8"):
             raise Exception(f"Failed to start SLAM: {start_result.output.decode('utf-8')}")
         
-        # 2. Ждём 10 секунд (не блокируя сервер)
+        # === ШАГ 2: Ждём 10 секунд ===
         await asyncio.sleep(10)
         
-        # 3. Останавливаем slam
-        stop_result = container.exec_run(f"{SUPERVISOR_CMD} stop {slam_component}")
         
+        stop_image_publisher(container)
+        # === ШАГ 3: Останавливаем ===
+        stop_result = container.exec_run(f"{SUPERVISOR_CMD} stop {slam_component}")
         output = f"Started: {start_result.output.decode('utf-8')}\nStopped: {stop_result.output.decode('utf-8')}"
         
-        # 4. Проверяем .osa файл
+        # === ШАГ 4: Проверяем, что файл .osa создался ===
         if project_id:
             projects_root = get_projects_root(request)
             project_path = get_project_path(projects_root, project_id)
             calibrations_dir = project_path / "calibrations"
             
-            osa_files = list(calibrations_dir.glob("*.osa"))
-            if not osa_files:
-                return CommandResponse(
-                    success=False,
-                    output=output,
-                    error="Файл .osa не найден. Инициализация SLAM не удалась."
-                )
+            # Ищем файл с нашим именем
+            expected_file = calibrations_dir / f"{save_name}.osa"
+            if not expected_file.exists():
+                # Пробуем найти любой .osa, созданный за последние 30 сек
+                recent_osa = [f for f in calibrations_dir.glob("*.osa") 
+                             if f.stat().st_mtime > time.time() - 30]
+                if not recent_osa:
+                    return CommandResponse(
+                        success=False,
+                        output=output,
+                        error=f"Файл .osa не найден. Ожидался: {expected_file.name}"
+                    )
+                expected_file = recent_osa[0]
         
         return CommandResponse(
             success=stop_result.exit_code == 0,
-            output=output
+            output=output,
+            data={"saved_map": save_name + ".osa"} if project_id else None
         )
         
     except docker.errors.NotFound:

@@ -16,11 +16,12 @@ services:
       - ./data/uploads:/app/uploads
       - ./data/calibrations:/app/calibrations
       - ./data/projects:/app/projects
+      - /opt/main/Trajectory/Database:/app/trajectory-db:rw
     environment:
       - DATABASE_URL=sqlite:///./odometry.db
       - VIDEO_SAVE_PATH=/app/uploads
       - CALIBRATION_PATH=/app/calibrations
-      - PROJECTS_PATH=/app/projects
+      - PROJECTS_PATH=/app/trajectory-db/projects
       - CORS_ORIGINS=http://localhost:8080,http://localhost:3000
       - ROSBRIDGE_HOST=host.docker.internal
       - ROSBRIDGE_PORT=9091
