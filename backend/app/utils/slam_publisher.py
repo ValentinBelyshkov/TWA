@@ -1,77 +1,74 @@
 # backend/utils/slam_publisher.py
-"""
-Утилиты для запуска и остановки image_publish.py в контейнере TerraSLAM.
-"""
 import asyncio
 import logging
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-
-async def start_image_publisher(
-    container, 
-    frames_dir: str, 
-    video_folder_env: Optional[str] = None
-) -> bool:
-    """
-    Запускает кастомный скрипт image_publish.py в контейнере TerraSLAM.
-    Соответствует конфигурации supervisor: user=orb, bash -l, source ROS2 && workspace.
-    """
+async def start_image_publisher(container, frames_dir: str, video_folder_env: Optional[str] = None) -> bool:
+    """Запускает image_publish.py в фоне внутри контейнера TerraSLAM."""
     if video_folder_env is None:
         video_folder_env = frames_dir
 
-    # Точная команда из supervisor config
-    cmd = (
-        f"/bin/bash -l -c '"
+    # 🔥 Команда с перенаправлением логов и фоновым запуском через nohup
+    # detach=True в exec_run тоже нужен, но nohup + & гарантирует, что процесс 
+    # не умрёт при закрытии exec-сессии
+    cmd = [
+        "/bin/bash", "-l", "-c",
         f"source /opt/ros/humble/setup.bash && "
-        f"source /home/orb/colcon_ws/install/setup.bash && "
-        f"cd /home/orb/Database && "
-        f"python3 image_publish.py \"{video_folder_env}\""
-        f"'"
-    )
+        f"nohup python3 /home/orb/Database/image_publish.py '{video_folder_env}' "
+        f"> /tmp/image_publisher.log 2>&1 &"
+    ]
 
     logger.info(f"🎬 Starting image_publisher: {frames_dir}")
-
+    
     try:
-        # ⚠️ ВАЖНО: shell=True в docker-py не поддерживается. Удаляем.
-        result = container.exec_run(
-            cmd,
-            detach=True,
-            tty=False,
-            user="orb"
+        # 🔥 Запускаем в отдельном потоке, чтобы не блокировать event loop,
+        # потому что docker-py — синхронная библиотека
+        loop = asyncio.get_event_loop()
+        exec_result = await loop.run_in_executor(
+            None, 
+            lambda: container.exec_run(cmd, user="orb")
         )
         
-        # Даём 3 секунды на инициализацию ROS2-ноды
-        await asyncio.sleep(3)
+        logger.info(f"🚀 Publisher detached exec exit_code={exec_result.exit_code}")
         
-        # Проверка появления ноды в графе (без shell=True)
-        check = container.exec_run("ros2 node list")
-        nodes = check.output.decode("utf-8", errors="ignore").lower()
+        # Даём 2 секунды на старт
+        await asyncio.sleep(2)
         
-        if "image" in nodes:
-            logger.info("✅ image_publish.py registered in ROS2 graph")
+        # Проверяем, жив ли процесс
+        check_cmd = "pgrep -f 'python3.*image_publish.py'"
+        pgrep_res = await loop.run_in_executor(
+            None,
+            lambda: container.exec_run(check_cmd, user="orb")
+        )
+        
+        if pgrep_res.exit_code == 0:
+            pids = pgrep_res.output.decode("utf-8", errors="ignore").strip()
+            logger.info(f"✅ image_publish.py is running, PID(s): {pids}")
             return True
         else:
-            logger.warning(f"⚠️ image_publish.py launched, but node not detected yet. Exit code: {result.exit_code}")
-            return True  # Процесс запущен, продолжаем
+            # Смотрим логи, почему упал
+            log_res = await loop.run_in_executor(
+                None,
+                lambda: container.exec_run("cat /tmp/image_publisher.log", user="orb")
+            )
+            log_output = log_res.output.decode("utf-8", errors="ignore").strip()
+            logger.warning(f"⚠️ Process not found. Logs:\n{log_output[:1000]}")
+            return False
             
     except Exception as e:
         logger.error(f"❌ Failed to start image_publisher: {e}")
         return False
 
-
 def stop_image_publisher(container) -> bool:
-    """
-    Корректно останавливает процесс image_publish.py в контейнере.
-    """
+    """Останавливает image_publish.py и чистит логи."""
     logger.info("🛑 Stopping image_publisher...")
     try:
-        # ⚠️ shell=True удалён. Docker-py сам оборачивает строку в sh -c
-        result = container.exec_run("pkill -f 'python3 image_publish.py'")
-        output = result.output.decode("utf-8", errors="ignore").strip()
-        logger.info(f"✅ image_publisher stopped: {output}")
-        return result.exit_code == 0
+        container.exec_run("pkill -f 'python3 image_publish.py'", user="orb")
+        container.exec_run("rm -f /tmp/image_publisher.log", user="orb")
+        logger.info("✅ image_publisher stopped")
+        return True
     except Exception as e:
         logger.error(f"❌ Failed to stop image_publisher: {e}")
         return False

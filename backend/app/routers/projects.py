@@ -34,7 +34,7 @@ async def process_video_with_progress(project_id, input_file, output_pattern):
     # Use -progress pipe:1 to get progress info on stdout
     process = await asyncio.create_subprocess_exec(
         "ffmpeg", "-y", "-i", input_file, 
-        "-vf", "fps=1", 
+        "-vf", "fps=10", 
         "-q:v", "2", 
         "-progress", "pipe:1",
         output_pattern,
@@ -232,7 +232,7 @@ async def upload_video(request: Request, project_id: str, file: UploadFile = Fil
         old_frame.unlink()
 
     input_file = str(save_path)
-    output_pattern = str(frames_dir / "frame_%04d.jpg")
+    output_pattern = str(frames_dir / "%04d.jpg")
     
     try:
         await process_video_with_progress(project_id, input_file, output_pattern)

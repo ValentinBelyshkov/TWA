@@ -79,7 +79,6 @@ async def connect_to_rosbridge():
                             height = msg["msg"].get("height", 0)
                             
                             if img_data:
-                                print(f"Received image: {width}x{height} {encoding}")
                                 
                                 # Convert to base64 if needed
                                 if isinstance(img_data, list):

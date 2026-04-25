@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from typing import Literal, Optional
 import docker
 import asyncio
+import logging
 import os
+import time
 from pathlib import Path
 from ..utils.yaml_editor import update_slam_yaml
 from ..utils.slam_publisher import start_image_publisher, stop_image_publisher
@@ -14,7 +16,7 @@ from app.routers.projects import (
 )
 
 router = APIRouter()
-
+logger = logging.getLogger(__name__)
 docker_client = docker.from_env()
 
 class ComponentAction(BaseModel):
@@ -335,86 +337,113 @@ async def terraslam_health():
         
 @router.post("/terraslam/slam/test-run")
 async def slam_test_run(request: Request, project_id: Optional[str] = None):
-    """
-    Запускает SLAM с чистой картой, ждёт 10 секунд, останавливает.
-    Перед запуском обновляет real.yaml: комментирует Load, устанавливает Save.
-    """
+    import time
+    t_start = time.time()
+    print(f"[TEST-RUN] Start. project_id={project_id}")
+    
     try:
-        # === 🔥 ШАГ 0: Обновляем YAML в общей папке ===
-        # Путь к real.yaml в shared volume /Database
-        # (настройте под ваш docker-compose volume mount)
-        SHARED_DATABASE_PATH = "/app/trajectory-db"  # ← путь внутри контейнера бэкенда
+        # === ШАГ 0: YAML ===
+        SHARED_DATABASE_PATH = "/app/trajectory-db"
         yaml_file = os.path.join(SHARED_DATABASE_PATH, "real.yaml")
+        save_name = f"map"
         
-        # Генерируем уникальное имя для сохранения (чтобы не перезаписывать)
-        import time
-        save_name = f"test-run-{int(time.time())}"
+        # Путь на хосте (где проверяет бэкенд)
+        projects_root = get_projects_root(request)
+        project_path = get_project_path(projects_root, project_id)
+        host_calib_dir = project_path / "calibrations"
+        host_calib_dir.mkdir(parents=True, exist_ok=True)
         
+        # Путь внутри контейнера (куда пишет SLAM)
+        # Предполагаем, что /home/orb/Database в контейнере = SHARED_DATABASE_PATH на хосте
+        container_calib_dir = f"/home/orb/Database/projects/{project_id}/calibrations"
+        container_save_path = f"{container_calib_dir}/{save_name}"
+        
+        print(f"[TEST-RUN] Host calib dir: {host_calib_dir}")
+        print(f"[TEST-RUN] Container save path: {container_save_path}")
+        
+        # === ШАГ 0: YAML ===
+        print(f"[TEST-RUN] Updating YAML: {yaml_file}")
         yaml_ok = update_slam_yaml(
-            yaml_path=yaml_file,
-            save_filename=save_name,
+            yaml_path=yaml_file, 
+            save_filename=container_save_path,  # ← полный путь!
             comment_load=True
         )
         if not yaml_ok:
-            raise Exception(f"Failed to update {yaml_file}")
+            raise Exception("YAML update failed")
+        print(f"[TEST-RUN] YAML OK. Save name: {save_name}")
         
-        # === ШАГ 1: Запускаем SLAM (как было) ===
+        # === ШАГ 1: Docker контейнер ===
+        print(f"[TEST-RUN] Getting container: {TERRASLAM_CONTAINER}")
         container = docker_client.containers.get(TERRASLAM_CONTAINER)
+        print(f"[TEST-RUN] Container found: {container.name}, status={container.status}")
+        
+        # === ШАГ 2: Запуск SLAM (с таймаутом через shell) ===
         slam_component = COMPONENT_MAPPING["slam"]
-        start_result = container.exec_run(f"{SUPERVISOR_CMD} start {slam_component}")
-        print(start_result)
-        if project_id:
-            projects_root = get_projects_root(request)
-            project_path = get_project_path(projects_root, project_id)
-            # 🔥 Критично: путь должен быть виден из TerraSLAM, т.е. через общий том
-            frames_dir_slam = f"{SLAM_DB}/projects/{project_id}/frames"
-        else:
-            raise Exception(f"Unknown project_id: {project_id}")
-        publisher_ok = await start_image_publisher(
-    container=container,
-    frames_dir=frames_dir_slam,
-    video_folder_env=frames_dir_slam
-)
+        cmd = f"bash -c 'timeout 10 {SUPERVISOR_CMD} start {slam_component} 2>&1 || true'"
+        print(f"[TEST-RUN] Executing: {cmd}")
         
-        if start_result.exit_code != 0 and "already started" not in start_result.output.decode("utf-8"):
-            raise Exception(f"Failed to start SLAM: {start_result.output.decode('utf-8')}")
+        start_result = container.exec_run(cmd)
+        stdout = start_result.output.decode("utf-8", errors="replace") if start_result.output else ""
+        print(f"[TEST-RUN] SLAM start exit_code={start_result.exit_code}, output={stdout.strip()}")
         
-        # === ШАГ 2: Ждём 10 секунд ===
-        await asyncio.sleep(10)
-        
-        
-        stop_image_publisher(container)
-        # === ШАГ 3: Останавливаем ===
-        stop_result = container.exec_run(f"{SUPERVISOR_CMD} stop {slam_component}")
-        output = f"Started: {start_result.output.decode('utf-8')}\nStopped: {stop_result.output.decode('utf-8')}"
-        
-        # === ШАГ 4: Проверяем, что файл .osa создался ===
-        if project_id:
-            projects_root = get_projects_root(request)
-            project_path = get_project_path(projects_root, project_id)
-            calibrations_dir = project_path / "calibrations"
+        # === ШАГ 3: Пути ===
+        if not project_id:
+            raise Exception("project_id required")
             
-            # Ищем файл с нашим именем
-            expected_file = calibrations_dir / f"{save_name}.osa"
-            if not expected_file.exists():
-                # Пробуем найти любой .osa, созданный за последние 30 сек
-                recent_osa = [f for f in calibrations_dir.glob("*.osa") 
-                             if f.stat().st_mtime > time.time() - 30]
-                if not recent_osa:
-                    return CommandResponse(
-                        success=False,
-                        output=output,
-                        error=f"Файл .osa не найден. Ожидался: {expected_file.name}"
-                    )
-                expected_file = recent_osa[0]
+        frames_dir_slam = f"{SLAM_DB}/projects/{project_id}/frames"
+        print(f"[TEST-RUN] frames_dir={frames_dir_slam}")
         
-        return CommandResponse(
-            success=stop_result.exit_code == 0,
-            output=output,
-            data={"saved_map": save_name + ".osa"} if project_id else None
-        )
+        # === ШАГ 4: Публикатор (с таймаутом) ===
+        print("[TEST-RUN] Starting image publisher...")
+        try:
+            publisher_ok = await asyncio.wait_for(
+                start_image_publisher(container=container, frames_dir=frames_dir_slam, video_folder_env=frames_dir_slam),
+                timeout=15.0
+            )
+            print(f"[TEST-RUN] Publisher started: {publisher_ok}")
+        except asyncio.TimeoutError:
+            print("[TEST-RUN] WARNING: Publisher start timed out, continuing anyway")
+            publisher_ok = False
         
-    except docker.errors.NotFound:
-        raise HTTPException(503, "TerraSLAM container not found")
+        # === ШАГ 5: Ждём ===
+        print("[TEST-RUN] Sleeping 10s...")
+        await asyncio.sleep(15)
+        
+        # === ШАГ 6: Стоп ===
+        print("[TEST-RUN] Stopping publisher...")
+        try:
+            stop_image_publisher(container)
+        except Exception as e:
+            print(f"[TEST-RUN] Publisher stop error: {e}")
+        
+        print("[TEST-RUN] Stopping SLAM...")
+        stop_cmd = f"bash -c 'timeout 10 /usr/bin/supervisorctl -s unix:///tmp/supervisor.sock stop {slam_component} 2>&1 || true'"
+        stop_result = await asyncio.get_running_loop().run_in_executor(None, lambda: container.exec_run(stop_cmd))
+        print(f"[TEST-RUN] SLAM stop exit_code={stop_result.exit_code}")
+        
+        # === ШАГ 7: Проверка .osa ===
+        projects_root = get_projects_root(request)
+        project_path = get_project_path(projects_root, project_id)
+        calibrations_dir = project_path / "calibrations"
+        
+        expected_file = calibrations_dir / f"{save_name}.osa"
+        print(f"[TEST-RUN] Looking for: {expected_file}")
+        
+        if not expected_file.exists():
+            recent = [f for f in calibrations_dir.glob("*.osa") if f.stat().st_mtime > time.time() - 60]
+            if recent:
+                expected_file = recent[0]
+                print(f"[TEST-RUN] Found recent: {expected_file}")
+            else:
+                print("[TEST-RUN] ERROR: No .osa file found!")
+                return CommandResponse(success=False,output="",error="No .osa created")
+        
+        print(f"[TEST-RUN] Done in {time.time()-t_start:.1f}s")
+        return CommandResponse(success=True,output="", data={"saved_map": expected_file.name})
+        
     except Exception as e:
-        raise HTTPException(500, f"Error in test-run: {str(e)}")
+        print(f"[TEST-RUN] FATAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, str(e))
+
