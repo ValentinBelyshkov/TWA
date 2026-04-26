@@ -29,6 +29,13 @@ class GCPSaveRequest(BaseModel):
     image_filename: str
     points: List[CalibrationPointRequest]
 
+class SingleImageGCP(BaseModel):
+    image_filename: str
+    points: List[CalibrationPointRequest]
+
+class AllGCPSaveRequest(BaseModel):
+    images: List[SingleImageGCP]
+
 class CalibrationStatusResponse(BaseModel):
     project_id: str
     calibrated: bool
@@ -188,6 +195,79 @@ async def save_gcp_file(request: Request, project_id: str, gcp_request: GCPSaveR
         "success": True,
         "gcp_filename": gcp_filename,
         "calibration_status": "calibrated"
+    }
+
+@router.post("/{project_id}/save-all-gcp")
+async def save_all_gcp(request: Request, project_id: str, save_request: AllGCPSaveRequest):
+    """Save all GCP files and generate calib.txt by matching points in procframe txt files."""
+    projects_root = get_projects_root(request)
+    project = read_project_metadata(projects_root, project_id)
+    
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_path = get_project_path(projects_root, project_id)
+    procframe_dir = project_path / "procframe"
+    calibrations_dir = project_path / "calibrations"
+    calibrations_dir.mkdir(parents=True, exist_ok=True)
+    
+    calib_lines = []
+    
+    for img_gcp in save_request.images:
+        # 1. Save .gpc file as before
+        gcp_filename = f"{Path(img_gcp.image_filename).stem}.gpc"
+        gcp_path = calibrations_dir / gcp_filename
+        
+        gpc_content = f"+proj=utm +zone=37 +datum=WGS84\n"
+        gpc_content += f"{img_gcp.image_filename}\n"
+        gpc_content += f"{len(img_gcp.points)}\n"
+        
+        for point in img_gcp.points:
+            gpc_content += f"{point.imageX:.6f} {point.imageY:.6f} {point.lng:.6f} {point.lat:.6f} {point.altitude:.2f}\n"
+            
+        with open(gcp_path, "w", encoding="utf-8") as f:
+            f.write(gpc_content)
+            
+        # 2. Match points for calib.txt
+        txt_path = procframe_dir / f"{Path(img_gcp.image_filename).stem}.txt"
+        if txt_path.exists():
+            image_coords = []
+            try:
+                with open(txt_path, 'r') as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if len(parts) >= 5:
+                            image_coords.append([float(p) for p in parts[:5]])
+            except Exception as e:
+                print(f"Error reading {txt_path}: {e}")
+                continue
+                
+            if image_coords:
+                for point in img_gcp.points:
+                    closest_dist = float('inf')
+                    closest_xyz = None
+                    for u, v, x, y, z in image_coords:
+                        dist = (u - point.imageX)**2 + (v - point.imageY)**2
+                        if dist < closest_dist:
+                            closest_dist = dist
+                            closest_xyz = (x, y, z)
+                    
+                    if closest_xyz:
+                        calib_lines.append(f"{point.lat:.8f} {point.lng:.8f}; {closest_xyz[0]:.6f} {closest_xyz[1]:.6f} {closest_xyz[2]:.6f}\n")
+
+    # Save calib.txt
+    calib_txt_path = calibrations_dir / "calib.txt"
+    with open(calib_txt_path, "w", encoding="utf-8") as f:
+        f.writelines(calib_lines)
+            
+    # Update project metadata
+    project.calibration_status = "calibrated"
+    write_project_metadata(projects_root, project)
+    
+    return {
+        "success": True,
+        "calibration_status": "calibrated",
+        "points_count": len(calib_lines)
     }
 
 @router.get("/{project_id}/status")

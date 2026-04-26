@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Trash2, Save, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MapComponent } from "@/components/MapComponent";
-import { saveGCPPoints, type CalibrationPointRequest } from "@/lib/api";
+import { saveAllGCPPoints, type CalibrationPointRequest } from "@/lib/api";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -169,19 +169,18 @@ export function CalibrationPointSelector({
       setSaveError(null);
 
       try {
-        for (const img of effectiveImages) {
-          const points: CalibrationPointRequest[] = pointsByImage[
-            img.filename
-          ].map((p) => ({
+        const payload = effectiveImages.map((img) => ({
+          image_filename: img.filename,
+          points: pointsByImage[img.filename].map((p) => ({
             imageX: p.imageX,
             imageY: p.imageY,
             lat: p.lat,
             lng: p.lng,
             altitude: p.altitude,
-          }));
+          })),
+        }));
 
-          await saveGCPPoints(projectId, img.filename, points);
-        }
+        await saveAllGCPPoints(projectId, payload);
         onComplete();
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : "Ошибка сохранения");
