@@ -2,6 +2,7 @@ import type { CalibrationStep } from "@/hooks/useProject";
 import { InstructionsStep } from "./InstructionsStep";
 import { ImageUploadStep } from "./ImageUploadStep";
 import { TestRunStep } from "./TestRunStep";
+import { FrameSelectionStep } from "./FrameSelectionStep";
 import {
   CalibrationPointSelector,
   type CalibrationPoint,
@@ -9,15 +10,18 @@ import {
 import type { RefObject } from "react";
 
 interface CalibrationWorkflowProps {
-  step: CalibrationStep;
+  calibrationStep: CalibrationStep;
   uploadedImage: { filename: string; url: string } | null;
+  selectedFrames: { filename: string; url: string }[];
   uploadError: string | null;
   isUploading: boolean;
   onInstructionsNext: () => void;
   onTestRunSuccess: () => void;
   onTestRunBack: () => void;
+  onFrameSelectionBack: () => void;
+  onFramesSelected: (frames: { filename: string; url: string }[]) => void;
   onImageUpload: (file: File) => void;
-  onCalibrationComplete: (points: CalibrationPoint[]) => void;
+  onCalibrationComplete: () => void;
   onCalibrationCancel: () => void;
   onUploadErrorDismiss: () => void;
   projectId?: string;
@@ -26,13 +30,16 @@ interface CalibrationWorkflowProps {
 }
 
 export function CalibrationWorkflow({
-  step,
+  calibrationStep,
   uploadedImage,
+  selectedFrames,
   uploadError,
   isUploading,
   onInstructionsNext,
   onTestRunSuccess,
   onTestRunBack,
+  onFrameSelectionBack,
+  onFramesSelected,
   onImageUpload,
   onCalibrationComplete,
   onCalibrationCancel,
@@ -42,22 +49,22 @@ export function CalibrationWorkflow({
   videoCanvasRef,
 }: CalibrationWorkflowProps) {
   const wrapOverlay = (content: React.ReactNode) => (
-    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col overflow-auto">
-      <div className="min-h-full w-full bg-white shadow-xl relative overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col">
+      <div className="h-full w-full bg-white shadow-xl relative overflow-hidden flex flex-col">
         <button
           onClick={onCalibrationCancel}
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground z-10 p-2 hover:bg-slate-100 rounded-full transition-colors"
         >
           <span className="text-xl">✕</span>
         </button>
-        <div className="flex-1">
+        <div className="flex-1 min-h-0">
           {content}
         </div>
       </div>
     </div>
   );
 
-  if (step === "instructions") {
+  if (calibrationStep === "instructions") {
     return wrapOverlay(
       <div className="flex flex-col h-full">
         <div className="flex-1 flex items-center justify-center">
@@ -76,7 +83,7 @@ export function CalibrationWorkflow({
     );
   }
 
-  if (step === "test-run" && projectId) {
+  if (calibrationStep === "test-run" && projectId) {
     return wrapOverlay(
       <TestRunStep
         projectId={projectId}
@@ -88,7 +95,17 @@ export function CalibrationWorkflow({
     );
   }
 
-  if (step === "upload") {
+  if (calibrationStep === "frame-selection" && projectId) {
+    return wrapOverlay(
+      <FrameSelectionStep
+        projectId={projectId}
+        onFramesSelected={onFramesSelected}
+        onBack={onFrameSelectionBack}
+      />
+    );
+  }
+
+  if (calibrationStep === "upload") {
     return wrapOverlay(
       <ImageUploadStep
         onUpload={onImageUpload}
@@ -100,16 +117,28 @@ export function CalibrationWorkflow({
     );
   }
 
-  if (step === "pairing" && uploadedImage) {
-    return (
-      <CalibrationPointSelector
-        imageUrl={uploadedImage.url}
-        onComplete={onCalibrationComplete}
-        onCancel={onCalibrationCancel}
-        projectId={projectId}
-        imageFilename={uploadedImage.filename}
-      />
-    );
+  if (calibrationStep === "pairing") {
+    if (selectedFrames.length > 0) {
+      return (
+        <CalibrationPointSelector
+          images={selectedFrames}
+          onComplete={onCalibrationComplete}
+          onCancel={onCalibrationCancel}
+          projectId={projectId}
+        />
+      );
+    }
+    if (uploadedImage) {
+      return (
+        <CalibrationPointSelector
+          imageUrl={uploadedImage.url}
+          onComplete={onCalibrationComplete}
+          onCancel={onCalibrationCancel}
+          projectId={projectId}
+          imageFilename={uploadedImage.filename}
+        />
+      );
+    }
   }
 
   return null;

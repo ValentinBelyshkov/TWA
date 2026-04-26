@@ -171,6 +171,14 @@ export async function uploadCalibrationImage(
   return response.json();
 }
 
+export async function procframe(
+  projectId: string,
+): Promise<{ filename: string; url: string }[]> {
+  return request<{ filename: string; url: string }[]>(
+    `/api/projects/${projectId}/procframe`,
+  );
+}
+
 export async function saveGCPPoints(
   projectId: string,
   imageFilename: string,
@@ -190,6 +198,34 @@ export async function saveGCPPoints(
     body: JSON.stringify({
       image_filename: imageFilename,
       points: points,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `Save failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function saveAllGCPPoints(
+  projectId: string,
+  images: { image_filename: string; points: CalibrationPointRequest[] }[],
+): Promise<{
+  success: boolean;
+  calibration_status: string;
+  points_count: number;
+}> {
+  const url = getFullUrl(`/api/projects/${projectId}/save-all-gcp`);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      images: images,
     }),
   });
 
