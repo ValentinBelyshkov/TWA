@@ -333,6 +333,10 @@ export function useProject(projectId: string | undefined) {
     setCalibrationStep("instructions");
   }, []);
 
+  const handleFrameSelectionBack = useCallback(() => {
+    setCalibrationStep("test-run");
+  }, []);
+
   const handleFramesSelected = useCallback((frames: { filename: string; url: string }[]) => {
     setSelectedFrames(frames);
     setCalibrationStep("pairing");
@@ -381,6 +385,7 @@ export function useProject(projectId: string | undefined) {
   const handleCalibrationCancel = useCallback(() => {
     setCalibrationStep(project?.calibrationStatus === "calibrated" ? "complete" : "idle");
     setUploadedImage(null);
+    setSelectedFrames([]);
   }, [project?.calibrationStatus]);
 
   const clearUploadError = useCallback(() => {
@@ -409,6 +414,7 @@ export function useProject(projectId: string | undefined) {
     handleInstructionsNext,
     handleTestRunSuccess,
     handleTestRunBack,
+    handleFrameSelectionBack,
     handleFramesSelected,
     handleImageUpload,
     handleCalibrationComplete,

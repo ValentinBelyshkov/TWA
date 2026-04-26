@@ -26,6 +26,7 @@ export default function ProjectScreen() {
     showCalibration,
     calibrationStep,
     uploadedImage,
+    selectedFrames,
     uploadError,
     isUploading,
     hasVideoStream,
@@ -36,6 +37,8 @@ export default function ProjectScreen() {
     handleInstructionsNext,
     handleTestRunSuccess,
     handleTestRunBack,
+    handleFrameSelectionBack,
+    handleFramesSelected,
     handleImageUpload,
     handleCalibrationComplete,
     handleCalibrationCancel,
@@ -109,6 +112,7 @@ export default function ProjectScreen() {
           onInstructionsNext={handleInstructionsNext}
           onTestRunSuccess={handleTestRunSuccess}
           onTestRunBack={handleTestRunBack}
+          onFrameSelectionBack={handleFrameSelectionBack}
           onFramesSelected={handleFramesSelected}
           onImageUpload={handleImageUpload}
           onCalibrationComplete={handleCalibrationComplete}

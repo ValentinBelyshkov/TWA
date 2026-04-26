@@ -18,6 +18,7 @@ interface CalibrationWorkflowProps {
   onInstructionsNext: () => void;
   onTestRunSuccess: () => void;
   onTestRunBack: () => void;
+  onFrameSelectionBack: () => void;
   onFramesSelected: (frames: { filename: string; url: string }[]) => void;
   onImageUpload: (file: File) => void;
   onCalibrationComplete: () => void;
@@ -37,6 +38,7 @@ export function CalibrationWorkflow({
   onInstructionsNext,
   onTestRunSuccess,
   onTestRunBack,
+  onFrameSelectionBack,
   onFramesSelected,
   onImageUpload,
   onCalibrationComplete,
@@ -98,7 +100,7 @@ export function CalibrationWorkflow({
       <FrameSelectionStep
         projectId={projectId}
         onFramesSelected={onFramesSelected}
-        onBack={onTestRunBack}
+        onBack={onFrameSelectionBack}
       />
     );
   }
