@@ -101,13 +101,15 @@ export default function ProjectScreen() {
         />
       ) : (
         <CalibrationWorkflow
-          step={calibrationStep}
+          calibrationStep={calibrationStep}
           uploadedImage={uploadedImage}
+          selectedFrames={selectedFrames}
           uploadError={uploadError}
           isUploading={isUploading}
           onInstructionsNext={handleInstructionsNext}
           onTestRunSuccess={handleTestRunSuccess}
           onTestRunBack={handleTestRunBack}
+          onFramesSelected={handleFramesSelected}
           onImageUpload={handleImageUpload}
           onCalibrationComplete={handleCalibrationComplete}
           onCalibrationCancel={handleCalibrationCancel}

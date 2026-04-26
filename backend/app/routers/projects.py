@@ -131,6 +131,7 @@ def write_project_metadata(projects_root: Path, project: Project) -> None:
     (project_path / "logs").mkdir(exist_ok=True)
     (project_path / "calibrations").mkdir(exist_ok=True)
     (project_path / "photos").mkdir(exist_ok=True)
+    (project_path / "procframe").mkdir(exist_ok=True)
     
     metadata_path = get_metadata_path(projects_root, project.id)
     with open(metadata_path, "w", encoding="utf-8") as f:

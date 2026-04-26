@@ -7,10 +7,11 @@ import {
   controlTerraSLAMComponent,
   getTerraSLAMStatus,
   type Project,
+  getProcFrames,
 } from "@/lib/api";
 import type { CalibrationPoint } from "@/components/CalibrationPointSelector";
 
-export type CalibrationStep = "idle" | "instructions" | "test-run" | "upload" | "pairing" | "complete";
+export type CalibrationStep = "idle" | "instructions" | "test-run" | "frame-selection" | "upload" | "pairing" | "complete";
 
 export interface TelemetryData {
   height: number;
@@ -53,6 +54,10 @@ export function useProject(projectId: string | undefined) {
     filename: string;
     url: string;
   } | null>(null);
+  const [selectedFrames, setSelectedFrames] = useState<{
+    filename: string;
+    url: string;
+  }[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [hasVideoStream, setHasVideoStream] = useState(false);
@@ -321,11 +326,16 @@ export function useProject(projectId: string | undefined) {
   }, []);
 
   const handleTestRunSuccess = useCallback(() => {
-    setCalibrationStep("upload");
+    setCalibrationStep("frame-selection");
   }, []);
 
   const handleTestRunBack = useCallback(() => {
     setCalibrationStep("instructions");
+  }, []);
+
+  const handleFramesSelected = useCallback((frames: { filename: string; url: string }[]) => {
+    setSelectedFrames(frames);
+    setCalibrationStep("pairing");
   }, []);
 
   const handleImageUpload = useCallback(
@@ -354,29 +364,18 @@ export function useProject(projectId: string | undefined) {
   );
 
   const handleCalibrationComplete = useCallback(
-    async (points: CalibrationPoint[]) => {
-      if (!projectId || !uploadedImage) return;
+    async () => {
+      if (!projectId) return;
 
       try {
-        await saveGCPPoints(
-          projectId,
-          uploadedImage.filename,
-          points.map((p) => ({
-            imageX: p.imageX,
-            imageY: p.imageY,
-            lat: p.lat,
-            lng: p.lng,
-            altitude: p.altitude,
-          }))
-        );
         await refetch();
         setCalibrationStep("complete");
         setTelemetry((prev) => ({ ...prev, status: "active" }));
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Ошибка сохранения точек");
+        alert(err instanceof Error ? err.message : "Ошибка обновления данных");
       }
     },
-    [projectId, uploadedImage, refetch]
+    [projectId, refetch]
   );
 
   const handleCalibrationCancel = useCallback(() => {
@@ -399,6 +398,7 @@ export function useProject(projectId: string | undefined) {
     showCalibration,
     calibrationStep,
     uploadedImage,
+    selectedFrames,
     uploadError,
     isUploading,
     hasVideoStream,
@@ -409,6 +409,7 @@ export function useProject(projectId: string | undefined) {
     handleInstructionsNext,
     handleTestRunSuccess,
     handleTestRunBack,
+    handleFramesSelected,
     handleImageUpload,
     handleCalibrationComplete,
     handleCalibrationCancel,

@@ -94,6 +94,61 @@ async def get_calibration_image(request: Request, project_id: str, image_name: s
         headers={"Content-Disposition": f"inline; filename={image_name}"}
     )
 
+@router.get("/{project_id}/proc-frames")
+async def list_proc_frames(request: Request, project_id: str):
+    """List all frames in the procframe directory of a project."""
+    projects_root = get_projects_root(request)
+    project_path = get_project_path(projects_root, project_id)
+    proc_frames_dir = project_path / "procframe"
+    
+    if not proc_frames_dir.exists():
+        return []
+    
+    frames = []
+    # Supporting common image formats
+    for ext in ['*.jpg', '*.jpeg', '*.png', '*.webp', '*.JPG', '*.JPEG', '*.PNG', '*.WEBP']:
+        for frame_path in proc_frames_dir.glob(ext):
+            frames.append({
+                "filename": frame_path.name,
+                "url": f"/api/projects/{project_id}/proc-frames/{frame_path.name}"
+            })
+    
+    # Sort by filename
+    frames.sort(key=lambda x: x["filename"])
+    return frames
+
+@router.get("/{project_id}/proc-frames/{image_name}")
+async def get_proc_frame(request: Request, project_id: str, image_name: str):
+    """Serve images from the procframe folder."""
+    projects_root = get_projects_root(request)
+    project_path = get_project_path(projects_root, project_id)
+    image_path = project_path / "procframe" / image_name
+    
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    ext = image_name.lower().split('.')[-1] if '.' in image_name else 'jpg'
+    content_type = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'webp': 'image/webp'
+    }.get(ext, 'image/jpeg')
+    
+    async def file_iterator():
+        async with aiofiles.open(image_path, 'rb') as f:
+            while True:
+                chunk = await f.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+    
+    return StreamingResponse(
+        file_iterator(),
+        media_type=content_type,
+        headers={"Content-Disposition": f"inline; filename={image_name}"}
+    )
+
 @router.post("/{project_id}/save-gcp")
 async def save_gcp_file(request: Request, project_id: str, gcp_request: GCPSaveRequest):
     """Save GCP (Ground Control Points) file with +proj=utm header."""

@@ -171,6 +171,14 @@ export async function uploadCalibrationImage(
   return response.json();
 }
 
+export async function getProcFrames(
+  projectId: string,
+): Promise<{ filename: string; url: string }[]> {
+  return request<{ filename: string; url: string }[]>(
+    `/api/projects/${projectId}/proc-frames`,
+  );
+}
+
 export async function saveGCPPoints(
   projectId: string,
   imageFilename: string,

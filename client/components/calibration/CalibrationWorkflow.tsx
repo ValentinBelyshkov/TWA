@@ -2,6 +2,7 @@ import type { CalibrationStep } from "@/hooks/useProject";
 import { InstructionsStep } from "./InstructionsStep";
 import { ImageUploadStep } from "./ImageUploadStep";
 import { TestRunStep } from "./TestRunStep";
+import { FrameSelectionStep } from "./FrameSelectionStep";
 import {
   CalibrationPointSelector,
   type CalibrationPoint,
@@ -9,15 +10,17 @@ import {
 import type { RefObject } from "react";
 
 interface CalibrationWorkflowProps {
-  step: CalibrationStep;
+  calibrationStep: CalibrationStep;
   uploadedImage: { filename: string; url: string } | null;
+  selectedFrames: { filename: string; url: string }[];
   uploadError: string | null;
   isUploading: boolean;
   onInstructionsNext: () => void;
   onTestRunSuccess: () => void;
   onTestRunBack: () => void;
+  onFramesSelected: (frames: { filename: string; url: string }[]) => void;
   onImageUpload: (file: File) => void;
-  onCalibrationComplete: (points: CalibrationPoint[]) => void;
+  onCalibrationComplete: () => void;
   onCalibrationCancel: () => void;
   onUploadErrorDismiss: () => void;
   projectId?: string;
@@ -26,13 +29,15 @@ interface CalibrationWorkflowProps {
 }
 
 export function CalibrationWorkflow({
-  step,
+  calibrationStep,
   uploadedImage,
+  selectedFrames,
   uploadError,
   isUploading,
   onInstructionsNext,
   onTestRunSuccess,
   onTestRunBack,
+  onFramesSelected,
   onImageUpload,
   onCalibrationComplete,
   onCalibrationCancel,
@@ -57,7 +62,7 @@ export function CalibrationWorkflow({
     </div>
   );
 
-  if (step === "instructions") {
+  if (calibrationStep === "instructions") {
     return wrapOverlay(
       <div className="flex flex-col h-full">
         <div className="flex-1 flex items-center justify-center">
@@ -76,7 +81,7 @@ export function CalibrationWorkflow({
     );
   }
 
-  if (step === "test-run" && projectId) {
+  if (calibrationStep === "test-run" && projectId) {
     return wrapOverlay(
       <TestRunStep
         projectId={projectId}
@@ -88,7 +93,17 @@ export function CalibrationWorkflow({
     );
   }
 
-  if (step === "upload") {
+  if (calibrationStep === "frame-selection" && projectId) {
+    return wrapOverlay(
+      <FrameSelectionStep
+        projectId={projectId}
+        onFramesSelected={onFramesSelected}
+        onBack={onTestRunBack}
+      />
+    );
+  }
+
+  if (calibrationStep === "upload") {
     return wrapOverlay(
       <ImageUploadStep
         onUpload={onImageUpload}
@@ -100,16 +115,28 @@ export function CalibrationWorkflow({
     );
   }
 
-  if (step === "pairing" && uploadedImage) {
-    return (
-      <CalibrationPointSelector
-        imageUrl={uploadedImage.url}
-        onComplete={onCalibrationComplete}
-        onCancel={onCalibrationCancel}
-        projectId={projectId}
-        imageFilename={uploadedImage.filename}
-      />
-    );
+  if (calibrationStep === "pairing") {
+    if (selectedFrames.length > 0) {
+      return (
+        <CalibrationPointSelector
+          images={selectedFrames}
+          onComplete={onCalibrationComplete}
+          onCancel={onCalibrationCancel}
+          projectId={projectId}
+        />
+      );
+    }
+    if (uploadedImage) {
+      return (
+        <CalibrationPointSelector
+          imageUrl={uploadedImage.url}
+          onComplete={onCalibrationComplete}
+          onCancel={onCalibrationCancel}
+          projectId={projectId}
+          imageFilename={uploadedImage.filename}
+        />
+      );
+    }
   }
 
   return null;
