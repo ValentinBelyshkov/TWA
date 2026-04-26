@@ -3,7 +3,7 @@ import { Check, Loader2, Image as ImageIcon, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getProcFrames } from "@/lib/api";
+import { procframe } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Frame {
@@ -31,7 +31,7 @@ export function FrameSelectionStep({
     async function loadFrames() {
       try {
         setIsLoading(true);
-        const data = await getProcFrames(projectId);
+        const data = await procframe(projectId);
         setFrames(data);
         if (data.length === 0) {
           setError("В папке procframe не найдено изображений");

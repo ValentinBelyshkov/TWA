@@ -94,7 +94,7 @@ async def get_calibration_image(request: Request, project_id: str, image_name: s
         headers={"Content-Disposition": f"inline; filename={image_name}"}
     )
 
-@router.get("/{project_id}/proc-frames")
+@router.get("/{project_id}/procframe")
 async def list_proc_frames(request: Request, project_id: str):
     """List all frames in the procframe directory of a project."""
     projects_root = get_projects_root(request)
@@ -110,14 +110,14 @@ async def list_proc_frames(request: Request, project_id: str):
         for frame_path in proc_frames_dir.glob(ext):
             frames.append({
                 "filename": frame_path.name,
-                "url": f"/api/projects/{project_id}/proc-frames/{frame_path.name}"
+                "url": f"/api/projects/{project_id}/procframe/{frame_path.name}"
             })
     
     # Sort by filename
     frames.sort(key=lambda x: x["filename"])
     return frames
 
-@router.get("/{project_id}/proc-frames/{image_name}")
+@router.get("/{project_id}/procframe/{image_name}")
 async def get_proc_frame(request: Request, project_id: str, image_name: str):
     """Serve images from the procframe folder."""
     projects_root = get_projects_root(request)

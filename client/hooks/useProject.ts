@@ -7,7 +7,7 @@ import {
   controlTerraSLAMComponent,
   getTerraSLAMStatus,
   type Project,
-  getProcFrames,
+  procframe,
 } from "@/lib/api";
 import type { CalibrationPoint } from "@/components/CalibrationPointSelector";
 

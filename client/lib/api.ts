@@ -171,11 +171,11 @@ export async function uploadCalibrationImage(
   return response.json();
 }
 
-export async function getProcFrames(
+export async function procframe(
   projectId: string,
 ): Promise<{ filename: string; url: string }[]> {
   return request<{ filename: string; url: string }[]>(
-    `/api/projects/${projectId}/proc-frames`,
+    `/api/projects/${projectId}/procframe`,
   );
 }
 

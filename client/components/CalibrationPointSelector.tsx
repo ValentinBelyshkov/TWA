@@ -235,8 +235,8 @@ export function CalibrationPointSelector({
   };
 
   return (
-    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col overflow-auto">
-      <div className="min-h-full bg-white w-full flex flex-col shadow-xl overflow-hidden">
+    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col">
+      <div className="h-full bg-white w-full flex flex-col shadow-xl overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-primary to-secondary text-white p-5 flex justify-between items-center shrink-0">
           <div>

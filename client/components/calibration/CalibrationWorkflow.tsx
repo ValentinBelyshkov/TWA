@@ -49,15 +49,15 @@ export function CalibrationWorkflow({
   videoCanvasRef,
 }: CalibrationWorkflowProps) {
   const wrapOverlay = (content: React.ReactNode) => (
-    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col overflow-auto">
-      <div className="min-h-full w-full bg-white shadow-xl relative overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col">
+      <div className="h-full w-full bg-white shadow-xl relative overflow-hidden flex flex-col">
         <button
           onClick={onCalibrationCancel}
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground z-10 p-2 hover:bg-slate-100 rounded-full transition-colors"
         >
           <span className="text-xl">✕</span>
         </button>
-        <div className="flex-1">
+        <div className="flex-1 min-h-0">
           {content}
         </div>
       </div>
