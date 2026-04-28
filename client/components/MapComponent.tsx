@@ -10,6 +10,7 @@ interface MapComponentProps {
   onMapClick?: (lat: number, lng: number) => void;
   selectedPoint?: { lat: number; lng: number };
   showMarkers?: boolean;
+  followDrone?: boolean;
 }
 
 // Fix for default marker icons in Leaflet - moved inside component to avoid SSR issues
@@ -39,6 +40,7 @@ export function MapComponent({
   onMapClick,
   selectedPoint,
   showMarkers = true,
+  followDrone = true,
 }: MapComponentProps) {
   const mapId = useRef(`map-${Math.random().toString(36).substr(2, 9)}`);
   const mapRef = useRef<L.Map | null>(null);
@@ -69,17 +71,35 @@ export function MapComponent({
     if (mapRef.current) return;
 
     // Initialize map
-    const map = L.map(mapId.current).setView(
+    const map = L.map(mapId.current, {
+      zoomControl: false // We'll add it later or keep default, but usually custom positioning is better
+    }).setView(
       [dronePosition.lat, dronePosition.lng],
       17,
     );
 
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
     // Add OpenStreetMap tile layer
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
-    }).addTo(map);
+    });
+
+    // Add Satellite tile layer
+    const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+      maxZoom: 19,
+    });
+
+    const baseMaps = {
+      "Карта": osm,
+      "Спутник": satellite
+    };
+
+    osm.addTo(map);
+    L.control.layers(baseMaps, {}, { position: 'topright' }).addTo(map);
 
     mapRef.current = map;
 
@@ -153,9 +173,11 @@ export function MapComponent({
     if (droneMarkerRef.current && mapRef.current) {
       droneMarkerRef.current.setLatLng([dronePosition.lat, dronePosition.lng]);
       // Optionally follow drone
-      mapRef.current.panTo([dronePosition.lat, dronePosition.lng]);
+      if (followDrone) {
+        mapRef.current.panTo([dronePosition.lat, dronePosition.lng]);
+      }
     }
-  }, [dronePosition]);
+  }, [dronePosition, followDrone]);
 
   // Update path
   useEffect(() => {

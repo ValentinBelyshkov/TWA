@@ -397,6 +397,7 @@ export function CalibrationPointSelector({
               <div className="relative aspect-video lg:flex-1 rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-100 shadow-inner">
                 <MapComponent
                   dronePosition={{ lat: 55.7558, lng: 37.6173 }}
+                  followDrone={false}
                   path={completedPoints.map((p) => ({
                     lat: p.lat,
                     lng: p.lng,
