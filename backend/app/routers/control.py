@@ -156,7 +156,10 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
                     container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
                     # Also try to pass as parameter if the component is already running (for ROS2)
                     container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {project.frames_path} || true\"")
-
+                if comp == "relay" and action.project_id:
+                    calib_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/calib.txt"
+                    container.exec_run(f"bash -c \"echo '{calib_path}' > /tmp/terraslam_relay_calib_path\"")
+                # ===================
                 res = container.exec_run(f"{SUPERVISOR_CMD} {action.action} {comp}")
                 combined_output += res.output.decode("utf-8") + "\n"
                 if res.exit_code != 0:
