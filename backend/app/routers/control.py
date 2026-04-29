@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import time
+import shutil
 from pathlib import Path
 from ..utils.yaml_editor import update_slam_yaml
 from ..utils.slam_publisher import start_image_publisher, stop_image_publisher
@@ -356,6 +357,23 @@ async def slam_test_run(request: Request, project_id: Optional[str] = None):
         host_calib_dir = project_path / "calibrations"
         host_calib_dir.mkdir(parents=True, exist_ok=True)
         
+        # Очищаем папку procframe перед новой калибровкой
+        procframe_dir = project_path / "procframe"
+        if procframe_dir.exists():
+            print(f"[TEST-RUN] Clearing procframe directory: {procframe_dir}")
+            for item in procframe_dir.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                except Exception as e:
+                    print(f"[TEST-RUN] Warning: Could not delete {item}: {e}")
+            print("[TEST-RUN] procframe directory cleared")
+        else:
+            procframe_dir.mkdir(parents=True, exist_ok=True)
+            print(f"[TEST-RUN] procframe directory created: {procframe_dir}")
+        
         # Путь внутри контейнера (куда пишет SLAM)
         # Предполагаем, что /home/orb/Database в контейнере = SHARED_DATABASE_PATH на хосте
         container_calib_dir = f"/home/orb/Database/projects/{project_id}/calibrations"
@@ -398,9 +416,20 @@ async def slam_test_run(request: Request, project_id: Optional[str] = None):
         
         # === ШАГ 4: Публикатор (с таймаутом) ===
         print("[TEST-RUN] Starting image publisher...")
+        
+        # Определяем режим на основе типа проекта
+        project = read_project_metadata(projects_root, project_id)
+        publisher_mode = "folder" if (project and project.type == "симуляция") else "realsense"
+        print(f"[TEST-RUN] Publisher mode: {publisher_mode}")
+        
         try:
             publisher_ok = await asyncio.wait_for(
-                start_image_publisher(container=container, frames_dir=frames_dir_slam, video_folder_env=frames_dir_slam),
+                start_image_publisher(
+                    container=container, 
+                    frames_dir=frames_dir_slam, 
+                    video_folder_env=frames_dir_slam,
+                    mode=publisher_mode
+                ),
                 timeout=15.0
             )
             print(f"[TEST-RUN] Publisher started: {publisher_ok}")
@@ -415,7 +444,7 @@ async def slam_test_run(request: Request, project_id: Optional[str] = None):
         # === ШАГ 6: Стоп ===
         print("[TEST-RUN] Stopping publisher...")
         try:
-            stop_image_publisher(container)
+            stop_image_publisher(container, mode=publisher_mode)
         except Exception as e:
             print(f"[TEST-RUN] Publisher stop error: {e}")
         
