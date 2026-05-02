@@ -140,7 +140,7 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
                     container.exec_run(f"bash -c \"echo '{container_frames_path}' > /tmp/terraslam_folder_path\"", user="orb")
 
         # Handle selective component control for "all"
-        if action.component == "all" and action.action in ["start", "restart"]:
+        if action.component == "all" and action.action in ["start", "restart", "stop"]:
             if project and project.type == "симуляция":
                 target_components = ["slam_core", "relay", "image_publisher_folder", "rosbridge"]
                 others = ["image_publisher_realsense"]
@@ -150,7 +150,11 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
             
             # Stop components that should not be running in this mode
             for comp in others:
-                container.exec_run(f"{SUPERVISOR_CMD} stop {comp}")
+                if comp in ["image_publisher_folder", "image_publisher_realsense"]:
+                    publisher_mode = "folder" if comp == "image_publisher_folder" else "realsense"
+                    stop_image_publisher(container, mode=publisher_mode)
+                else:
+                    container.exec_run(f"{SUPERVISOR_CMD} stop {comp}")
                 
             # Perform action on target components
             combined_output = ""

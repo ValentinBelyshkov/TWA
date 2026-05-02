@@ -1,4 +1,3 @@
-```gitignore
 # Python cache files
 __pycache__/
 *.pyc
@@ -8,6 +7,8 @@ __pycache__/
 # Dependencies
 venv/
 .venv/
+node_modules/
+dist/
 .env
 .env.local
 .env.*
@@ -24,4 +25,7 @@ venv/
 .coverage
 htmlcov/
 coverage/
-```
+
+# Frontend build
+dist/
+.vite/
