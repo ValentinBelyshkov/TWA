@@ -308,7 +308,7 @@ export function CalibrationPointSelector({
                   <img
                     src={currentImage.url}
                     alt="Calibration"
-                    className="w-full h-full object-cover pointer-events-none select-none"
+                    className="w-full h-full object-contain pointer-events-none select-none"
                   />
                 )}
 

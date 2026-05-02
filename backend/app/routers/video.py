@@ -46,7 +46,7 @@ ROSBRIDGE_HOST = os.getenv("ROSBRIDGE_HOST", "localhost")
 ROSBRIDGE_PORT = int(os.getenv("ROSBRIDGE_PORT", 9091))
 
 async def connect_to_rosbridge():
-    """Connect to rosbridge WebSocket and subscribe to /camera/image_raw."""
+    """Connect to rosbridge WebSocket and subscribe to /camera/image_raw/compressed."""
     ws_url = f"ws://{ROSBRIDGE_HOST}:{ROSBRIDGE_PORT}"
     
     while True:
@@ -57,38 +57,29 @@ async def connect_to_rosbridge():
                 
                 subscribe_msg = {
                     "op": "subscribe",
-                    "topic": "/camera/image_raw",
-                    "type": "sensor_msgs/msg/Image",
+                    "topic": "/camera/image_raw/compressed",
+                    "type": "sensor_msgs/msg/CompressedImage",
                     "queue_length": 1
                 }
                 await websocket.send(json.dumps(subscribe_msg))
-                print(f"Subscription sent")
+                print(f"Subscription sent for /camera/image_raw/compressed")
                 
                 async for message in websocket:
                     try:
                         msg = json.loads(message)
                         
                         if msg.get("op") == "fragment":
-                            print(f"Fragment received (skipping)")
                             continue
                         
-                        if msg.get("topic") == "/camera/image_raw" and "msg" in msg:
+                        if msg.get("topic") == "/camera/image_raw/compressed" and "msg" in msg:
                             img_data = msg["msg"].get("data")
-                            encoding = msg["msg"].get("encoding", "unknown")
-                            width = msg["msg"].get("width", 0)
-                            height = msg["msg"].get("height", 0)
                             
                             if img_data:
-                                
-                                # Convert to base64 if needed
                                 if isinstance(img_data, list):
-                                    # ROS sends data as array of ints
                                     img_bytes = bytes(img_data)
                                     img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-                                    print(f"Converted {len(img_data)} bytes to base64 ({len(img_b64)} chars)")
                                     await video_stream_manager.broadcast(img_b64)
                                 elif isinstance(img_data, str):
-                                    # Already base64 string
                                     await video_stream_manager.broadcast(img_data)
                                 else:
                                     print(f"Unknown data type: {type(img_data)}")
