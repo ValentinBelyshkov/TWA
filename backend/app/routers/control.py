@@ -156,11 +156,33 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
             combined_output = ""
             success = True
             for comp in target_components:
-                # Handle path for publisher folder
-                if comp == "image_publisher_folder" and action.project_id:
-                    container_frames_path = f"{SLAM_DB}/projects/{action.project_id}/frames"
-                    # Also try to pass as parameter if the component is already running (for ROS2)
-                    container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {container_frames_path} || true\"", user="orb")
+                # Handle publisher components separately
+                if comp in ["image_publisher_folder", "image_publisher_realsense"]:
+                    publisher_mode = "folder" if comp == "image_publisher_folder" else "realsense"
+                    if action.action in ["start", "restart"]:
+                        if action.action == "restart":
+                            stop_image_publisher(container, mode=publisher_mode)
+                            
+                        if not action.project_id:
+                            combined_output += f"Publisher {publisher_mode} failed: project_id missing\n"
+                            success = False
+                            continue
+                        frames_dir = f"{SLAM_DB}/projects/{action.project_id}/frames"
+                        pub_success = await start_image_publisher(
+                            container=container,
+                            frames_dir=frames_dir,
+                            video_folder_env=frames_dir,
+                            mode=publisher_mode
+                        )
+                        combined_output += f"Publisher {publisher_mode} started: {pub_success}\n"
+                        if not pub_success:
+                            success = False
+                    elif action.action == "stop":
+                        pub_success = stop_image_publisher(container, mode=publisher_mode)
+                        combined_output += f"Publisher {publisher_mode} stopped: {pub_success}\n"
+                    continue
+
+                # Handle path for other components
                 if comp == "relay" and action.project_id:
                     calib_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/calib.txt"
                     container.exec_run(f"bash -c \"echo '{calib_path}' > /tmp/terraslam_relay_calib_path\"", user="orb")
@@ -181,12 +203,44 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
         if action.component == "publisher" and project:
             supervisor_component = "image_publisher_folder" if project.type == "симуляция" else "image_publisher_realsense"
 
-        # Handle folder path for image_publisher_folder when called individually
-        if action.project_id and (action.component in ["publisher", "publisher:folder"] or supervisor_component == "image_publisher_folder"):
-            container_frames_path = f"{SLAM_DB}/projects/{action.project_id}/frames"
-            container.exec_run(f"bash -c \"echo '{container_frames_path}' > /tmp/terraslam_folder_path\"", user="orb")
-            container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {container_frames_path} || true\"", user="orb")
-        
+        # Handle individual publisher control bypassing supervisor
+        if supervisor_component in ["image_publisher_folder", "image_publisher_realsense"]:
+            publisher_mode = "folder" if supervisor_component == "image_publisher_folder" else "realsense"
+            if action.action in ["start", "restart"]:
+                if action.action == "restart":
+                    stop_image_publisher(container, mode=publisher_mode)
+
+                if not action.project_id:
+                    raise HTTPException(400, "project_id is required to start publisher")
+                frames_dir = f"{SLAM_DB}/projects/{action.project_id}/frames"
+                pub_success = await start_image_publisher(
+                    container=container,
+                    frames_dir=frames_dir,
+                    video_folder_env=frames_dir,
+                    mode=publisher_mode
+                )
+                return CommandResponse(
+                    success=pub_success,
+                    output=f"Publisher {publisher_mode} started: {pub_success}",
+                    error=None if pub_success else "Failed to start publisher"
+                )
+            elif action.action == "stop":
+                pub_success = stop_image_publisher(container, mode=publisher_mode)
+                return CommandResponse(
+                    success=pub_success,
+                    output=f"Publisher {publisher_mode} stopped: {pub_success}",
+                    error=None if pub_success else "Failed to stop publisher"
+                )
+            elif action.action == "status":
+                check_cmd = "pgrep -f 'python3.*image_publish.py'" if publisher_mode == "folder" else "pgrep -f 'python3.*realsense.py'"
+                res = container.exec_run(check_cmd, user="orb")
+                is_running = res.exit_code == 0
+                return CommandResponse(
+                    success=True,
+                    output=f"{supervisor_component} {'RUNNING' if is_running else 'STOPPED'}",
+                    error=None
+                )
+
         if action.action == "status":
             result = container.exec_run(f"{SUPERVISOR_CMD} status {supervisor_component}")
         else:
