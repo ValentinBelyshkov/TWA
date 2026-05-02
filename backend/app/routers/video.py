@@ -26,7 +26,15 @@ class VideoStreamManager:
         self.active_connections.discard(websocket)
         print(f"Client disconnected. Total: {len(self.active_connections)}")
     
+    def has_active_connections(self) -> bool:
+        """Check if there are any active WebSocket connections."""
+        return len(self.active_connections) > 0
+    
     async def broadcast(self, frame_data: str):
+        if not self.has_active_connections():
+            # No active clients, skip broadcasting to save resources
+            return
+            
         self.current_frame = frame_data
         message = json.dumps({"type": "frame", "data": frame_data})
         disconnected = []

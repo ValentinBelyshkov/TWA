@@ -95,15 +95,50 @@ def stop_image_publisher(container, mode: str = "folder") -> bool:
         container: Docker контейнер TerraSLAM
         mode: Режим работы - "folder" или "realsense"
     """
-    logger.info("🛑 Stopping image_publisher...")
+    logger.info(f"🛑 Stopping image_publisher (mode={mode})...")
     try:
         if mode == "realsense":
-            container.exec_run("pkill -f 'python3 realsense.py'", user="orb")
-            container.exec_run("rm -f /tmp/image_publisher_realsense.log", user="orb")
+            process_pattern = "python3.*realsense.py"
+            log_file = "/tmp/image_publisher_realsense.log"
         else:
-            container.exec_run("pkill -f 'python3 image_publish.py'", user="orb")
-            container.exec_run("rm -f /tmp/image_publisher.log", user="orb")
-        logger.info("✅ image_publisher stopped")
+            process_pattern = "python3.*image_publish.py"
+            log_file = "/tmp/image_publisher.log"
+        
+        # Step 1: Try graceful SIGTERM first (allows process to cleanup)
+        sigterm_cmd = f"pkill -TERM -f '{process_pattern}' 2>/dev/null || true"
+        container.exec_run(sigterm_cmd, user="orb")
+        
+        # Step 2: Wait a moment for graceful shutdown
+        import time
+        time.sleep(0.5)
+        
+        # Step 3: Check if process is still running
+        check_cmd = f"pgrep -f '{process_pattern}' || true"
+        check_result = container.exec_run(check_cmd, user="orb")
+        
+        if check_result.exit_code == 0:
+            # Process still running, force kill with SIGKILL
+            logger.info("⚠️ Process still running after SIGTERM, sending SIGKILL...")
+            kill_cmd = f"pkill -KILL -f '{process_pattern}' 2>/dev/null || true"
+            container.exec_run(kill_cmd, user="orb")
+            time.sleep(0.3)
+            
+            # Verify it's killed
+            final_check = container.exec_run(check_cmd, user="orb")
+            if final_check.exit_code == 0:
+                pids = final_check.output.decode("utf-8", errors="ignore").strip()
+                logger.error(f"❌ Failed to kill process even with SIGKILL, PIDs: {pids}")
+                return False
+        
+        # Step 4: Kill any orphaned ROS processes related to image publisher
+        cleanup_cmd = (
+            f"pkill -f 'ros2 topic pub.*image' 2>/dev/null || true; "
+            f"pkill -f '_image_transport' 2>/dev/null || true; "
+            f"rm -f /tmp/image_publisher*.log 2>/dev/null || true"
+        )
+        container.exec_run(cleanup_cmd, user="orb")
+        
+        logger.info(f"✅ image_publisher stopped (mode={mode})")
         return True
     except Exception as e:
         logger.error(f"❌ Failed to stop image_publisher: {e}")
