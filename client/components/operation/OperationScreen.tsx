@@ -54,7 +54,7 @@ export function OperationScreen({
           {/* Video Canvas - fixed styling for proper display */}
           <canvas
             ref={videoCanvasRef}
-            className={`absolute inset-0 w-full h-full ${hasVideoStream ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-0 w-full h-full object-contain ${hasVideoStream ? 'opacity-100' : 'opacity-0'}`}
             style={{ imageRendering: 'pixelated' }}
           />
           

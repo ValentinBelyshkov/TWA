@@ -161,29 +161,14 @@ export function useProject(projectId: string | undefined) {
           const ctx = canvas.getContext("2d");
           if (!ctx) return;
 
-          // Decode base64 to binary (BGR format from ROS)
-          const binaryString = atob(message.data);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          
-          const width = 1280;
-          const height = 720;
-          canvas.width = width;
-          canvas.height = height;
-          
-          const imgData = ctx.createImageData(width, height);
-          
-          // Convert BGR to RGBA
-          for (let i = 0, j = 0; i < bytes.length; i += 3, j += 4) {
-            imgData.data[j] = bytes[i + 2];     // R from B
-            imgData.data[j + 1] = bytes[i + 1]; // G
-            imgData.data[j + 2] = bytes[i];     // B from R
-            imgData.data[j + 3] = 255;          // Alpha
-          }
-          
-          ctx.putImageData(imgData, 0, 0);
+          // Decode and display compressed image (JPEG/PNG)
+          const img = new Image();
+          img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+          };
+          img.src = `data:image/jpeg;base64,${message.data}`;
         }
       } catch (e) {
         console.error("Video stream error:", e);
