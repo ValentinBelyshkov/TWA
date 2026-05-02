@@ -152,11 +152,12 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
             success = True
             for comp in target_components:
                 # Handle path for publisher folder
-                if comp == "image_publisher_folder" and project and project.frames_path:
+                if comp == "image_publisher_folder" and action.project_id:
+                    container_frames_path = f"{SLAM_DB}/projects/{action.project_id}/frames"
                     # Write to file
-                    container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
+                    container.exec_run(f"bash -c \"echo '{container_frames_path}' > /tmp/terraslam_folder_path\"")
                     # Also try to pass as parameter if the component is already running (for ROS2)
-                    container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {project.frames_path} || true\"")
+                    container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {container_frames_path} || true\"")
                 if comp == "relay" and action.project_id:
                     calib_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/calib.txt"
                     container.exec_run(f"bash -c \"echo '{calib_path}' > /tmp/terraslam_relay_calib_path\"")
@@ -175,9 +176,9 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
 
         # Handle folder path for image_publisher_folder when called individually
         if action.project_id and action.component in ["publisher", "publisher:folder"]:
-            if project and project.frames_path:
-                container.exec_run(f"bash -c \"echo '{project.frames_path}' > /tmp/terraslam_folder_path\"")
-                container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {project.frames_path} || true\"")
+            container_frames_path = f"{SLAM_DB}/projects/{action.project_id}/frames"
+            container.exec_run(f"bash -c \"echo '{container_frames_path}' > /tmp/terraslam_folder_path\"")
+            container.exec_run(f"bash -c \"ros2 param set /image_publisher_folder frames_path {container_frames_path} || true\"")
         
         if action.action == "status":
             result = container.exec_run(f"{SUPERVISOR_CMD} status {supervisor_component}")
