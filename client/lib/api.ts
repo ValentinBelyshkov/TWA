@@ -326,3 +326,77 @@ export async function saveAppSettings(
     body: JSON.stringify(settings),
   });
 }
+
+// Auto calibration API
+
+export interface AutoCalibrationRegion {
+  lat1: number;
+  lng1: number;
+  lat2: number;
+  lng2: number;
+  zoom: number;
+}
+
+export interface AutoCalibrationResult {
+  success: boolean;
+  geotiff_path?: string;
+  message?: string;
+  error?: string;
+  output?: string;
+}
+
+export interface AutoMatchResult {
+  success: boolean;
+  message: string;
+  details?: string;
+}
+
+export async function downloadGeotiff(
+  projectId: string,
+  region: AutoCalibrationRegion
+): Promise<AutoCalibrationResult> {
+  return request<AutoCalibrationResult>(
+    `/api/projects/${projectId}/auto/download-geotiff`,
+    {
+      method: "POST",
+      body: JSON.stringify(region),
+    }
+  );
+}
+
+export async function getGeotiffStatus(
+  projectId: string
+): Promise<{ exists: boolean; path: string | null }> {
+  return request<{ exists: boolean; path: string | null }>(
+    `/api/projects/${projectId}/auto/geotiff-status`
+  );
+}
+
+export async function getAutoCalibrationFrames(
+  projectId: string
+): Promise<{ filename: string; url: string }[]> {
+  return request<{ filename: string; url: string }[]>(
+    `/api/projects/${projectId}/auto/frames`
+  );
+}
+
+export async function matchImageToGeotiff(
+  projectId: string,
+  imageFilename: string
+): Promise<AutoMatchResult> {
+  return request<AutoMatchResult>(
+    `/api/projects/${projectId}/auto/match-image`,
+    {
+      method: "POST",
+      body: JSON.stringify({ image_filename: imageFilename }),
+    }
+  );
+}
+
+export async function getProjectFrames(
+  projectId: string
+): Promise<{ filename: string; url: string }[]> {
+  return request<{ filename: string; url: string }[]>(
+    `/api/projects/${projectId}/frames`
+  );
+}

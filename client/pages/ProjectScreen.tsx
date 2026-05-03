@@ -34,6 +34,7 @@ export default function ProjectScreen() {
     startRecording,
     stopRecording,
     handleCalibrate,
+    handleCalibrationTypeSelect,
     handleInstructionsNext,
     handleTestRunSuccess,
     handleTestRunBack,
@@ -45,6 +46,15 @@ export default function ProjectScreen() {
     clearUploadError,
     gpsStatus,
     systemStatus,
+    // Auto calibration
+    autoCalibrationRegion,
+    autoCalibrationFrames,
+    autoCalibrationError,
+    autoCalibrationProgress,
+    autoCalibrationMessage,
+    handleAutoRegionConfirm,
+    handleAutoImageSelect,
+    handleAutoCalibrationBack,
   } = useProject(projectId);
 
   if (isLoading) {
@@ -109,6 +119,7 @@ export default function ProjectScreen() {
           selectedFrames={selectedFrames}
           uploadError={uploadError}
           isUploading={isUploading}
+          onTypeSelect={handleCalibrationTypeSelect}
           onInstructionsNext={handleInstructionsNext}
           onTestRunSuccess={handleTestRunSuccess}
           onTestRunBack={handleTestRunBack}
@@ -121,6 +132,15 @@ export default function ProjectScreen() {
           projectId={projectId}
           hasVideoStream={hasVideoStream}
           videoCanvasRef={videoCanvasRef}
+          dronePosition={dronePosition}
+          autoCalibrationRegion={autoCalibrationRegion}
+          autoCalibrationFrames={autoCalibrationFrames}
+          autoCalibrationError={autoCalibrationError}
+          autoCalibrationProgress={autoCalibrationProgress}
+          autoCalibrationMessage={autoCalibrationMessage}
+          onAutoRegionConfirm={handleAutoRegionConfirm}
+          onAutoImageSelect={handleAutoImageSelect}
+          onAutoCalibrationBack={handleAutoCalibrationBack}
         />
       )}
 
