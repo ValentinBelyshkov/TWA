@@ -244,3 +244,68 @@ async def upload_video(request: Request, project_id: str, file: UploadFile = Fil
     write_project_metadata(projects_root, project)
     
     return {"message": "Video uploaded and processed", "filename": str(save_path), "frames_path": project.frames_path}
+
+@router.get("/{project_id}/frames")
+async def get_project_frames(request: Request, project_id: str):
+    """Get list of frames for a project."""
+    projects_root = get_projects_root(request)
+    project = read_project_metadata(projects_root, project_id)
+    
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_path = get_project_path(projects_root, project_id)
+    frames_dir = project_path / "frames"
+    
+    if not frames_dir.exists():
+        frames_dir = project_path / "procframe"
+    
+    if not frames_dir.exists():
+        return []
+    
+    frames = []
+    for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']:
+        for frame_path in frames_dir.glob(ext):
+            frames.append({
+                "filename": frame_path.name,
+                "url": f"/api/projects/{project_id}/frames/{frame_path.name}"
+            })
+    
+    frames.sort(key=lambda x: x["filename"])
+    return frames
+
+@router.get("/{project_id}/frames/{frame_name}")
+async def get_project_frame(request: Request, project_id: str, frame_name: str):
+    """Serve a frame image from the project."""
+    projects_root = get_projects_root(request)
+    project_path = get_project_path(projects_root, project_id)
+    
+    # Try frames directory first
+    frame_path = project_path / "frames" / frame_name
+    if not frame_path.exists():
+        frame_path = project_path / "procframe" / frame_name
+    
+    if not frame_path.exists():
+        raise HTTPException(status_code=404, detail="Frame not found")
+    
+    ext = frame_name.lower().split('.')[-1] if '.' in frame_name else 'jpg'
+    content_type = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'webp': 'image/webp'
+    }.get(ext, 'image/jpeg')
+    
+    async def file_iterator():
+        async with aiofiles.open(frame_path, 'rb') as f:
+            while True:
+                chunk = await f.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+    
+    return StreamingResponse(
+        file_iterator(),
+        media_type=content_type,
+        headers={"Content-Disposition": f"inline; filename={frame_name}"}
+    )

@@ -1,4 +1,7 @@
 import type { CalibrationStep } from "@/hooks/useProject";
+import { CalibrationTypeSelection } from "./CalibrationTypeSelection";
+import { AutoCalibrationRegion } from "./AutoCalibrationRegion";
+import { AutoCalibrationImageSelect } from "./AutoCalibrationImageSelect";
 import { InstructionsStep } from "./InstructionsStep";
 import { ImageUploadStep } from "./ImageUploadStep";
 import { TestRunStep } from "./TestRunStep";
@@ -7,6 +10,7 @@ import {
   CalibrationPointSelector,
   type CalibrationPoint,
 } from "@/components/CalibrationPointSelector";
+import type { AutoCalibrationRegion as AutoCalibrationRegionType } from "@/lib/api";
 import type { RefObject } from "react";
 
 interface CalibrationWorkflowProps {
@@ -15,6 +19,7 @@ interface CalibrationWorkflowProps {
   selectedFrames: { filename: string; url: string }[];
   uploadError: string | null;
   isUploading: boolean;
+  onTypeSelect: (type: "manual" | "auto") => void;
   onInstructionsNext: () => void;
   onTestRunSuccess: () => void;
   onTestRunBack: () => void;
@@ -27,6 +32,16 @@ interface CalibrationWorkflowProps {
   projectId?: string;
   hasVideoStream: boolean;
   videoCanvasRef: RefObject<HTMLCanvasElement | null>;
+  // Auto calibration props
+  dronePosition: { lat: number; lng: number };
+  autoCalibrationRegion: AutoCalibrationRegionType | null;
+  autoCalibrationFrames: { filename: string; url: string }[];
+  autoCalibrationError: string | null;
+  autoCalibrationProgress: "idle" | "downloading" | "matching" | "success" | "error";
+  autoCalibrationMessage: string | null;
+  onAutoRegionConfirm: (region: AutoCalibrationRegionType) => void;
+  onAutoImageSelect: (imageFilename: string) => void;
+  onAutoCalibrationBack: () => void;
 }
 
 export function CalibrationWorkflow({
@@ -35,6 +50,7 @@ export function CalibrationWorkflow({
   selectedFrames,
   uploadError,
   isUploading,
+  onTypeSelect,
   onInstructionsNext,
   onTestRunSuccess,
   onTestRunBack,
@@ -47,6 +63,15 @@ export function CalibrationWorkflow({
   projectId,
   hasVideoStream,
   videoCanvasRef,
+  dronePosition,
+  autoCalibrationRegion,
+  autoCalibrationFrames,
+  autoCalibrationError,
+  autoCalibrationProgress,
+  autoCalibrationMessage,
+  onAutoRegionConfirm,
+  onAutoImageSelect,
+  onAutoCalibrationBack,
 }: CalibrationWorkflowProps) {
   const wrapOverlay = (content: React.ReactNode) => (
     <div className="fixed inset-0 z-[1200] bg-slate-50 flex flex-col">
@@ -63,6 +88,43 @@ export function CalibrationWorkflow({
       </div>
     </div>
   );
+
+  // Type selection step
+  if (calibrationStep === "type-selection") {
+    return wrapOverlay(
+      <CalibrationTypeSelection
+        onSelect={onTypeSelect}
+        onBack={onCalibrationCancel}
+      />
+    );
+  }
+
+  // Auto calibration steps
+  if (calibrationStep === "auto-region") {
+    return wrapOverlay(
+      <AutoCalibrationRegion
+        onConfirm={onAutoRegionConfirm}
+        onBack={onAutoCalibrationBack}
+        dronePosition={dronePosition}
+        error={autoCalibrationError}
+        progress={autoCalibrationProgress}
+        message={autoCalibrationMessage}
+      />
+    );
+  }
+
+  if (calibrationStep === "auto-image-select") {
+    return wrapOverlay(
+      <AutoCalibrationImageSelect
+        frames={autoCalibrationFrames}
+        onSelect={onAutoImageSelect}
+        onBack={onAutoCalibrationBack}
+        error={autoCalibrationError}
+        progress={autoCalibrationProgress}
+        message={autoCalibrationMessage}
+      />
+    );
+  }
 
   if (calibrationStep === "instructions") {
     return wrapOverlay(

@@ -29,3 +29,7 @@ coverage/
 # Frontend build
 dist/
 .vite/
+
+# Calibration data (per project)
+data/projects/*/
+data/projects/*.json

@@ -8,10 +8,25 @@ import {
   getTerraSLAMStatus,
   type Project,
   procframe,
+  downloadGeotiff,
+  matchImageToGeotiff,
+  getAutoCalibrationFrames,
+  type AutoCalibrationRegion,
 } from "@/lib/api";
 import type { CalibrationPoint } from "@/components/CalibrationPointSelector";
 
-export type CalibrationStep = "idle" | "instructions" | "test-run" | "frame-selection" | "upload" | "pairing" | "complete";
+export type CalibrationStep = 
+  | "idle" 
+  | "type-selection"    // NEW: Выбор типа калибровки
+  | "instructions" 
+  | "test-run" 
+  | "frame-selection" 
+  | "upload" 
+  | "pairing" 
+  | "complete"
+  | "auto-region"        // NEW: Выбор региона на карте для auto калибровки
+  | "auto-downloading"  // NEW: Загрузка GeoTIFF
+  | "auto-image-select"; // NEW: Выбор изображения для сопоставления
 
 export interface TelemetryData {
   height: number;
@@ -70,6 +85,13 @@ export function useProject(projectId: string | undefined) {
     lon: null,
     alt: null,
   });
+
+  // NEW: Auto calibration state
+  const [autoCalibrationRegion, setAutoCalibrationRegion] = useState<AutoCalibrationRegion | null>(null);
+  const [autoCalibrationFrames, setAutoCalibrationFrames] = useState<{ filename: string; url: string }[]>([]);
+  const [autoCalibrationError, setAutoCalibrationError] = useState<string | null>(null);
+  const [autoCalibrationProgress, setAutoCalibrationProgress] = useState<"idle" | "downloading" | "matching" | "success" | "error">("idle");
+  const [autoCalibrationMessage, setAutoCalibrationMessage] = useState<string | null>(null);
 
   // System status from TerraSLAM
   const [systemStatus, setSystemStatus] = useState<{
@@ -314,7 +336,15 @@ export function useProject(projectId: string | undefined) {
   }, [projectId]);
 
   const handleCalibrate = useCallback(() => {
-    setCalibrationStep("instructions");
+    setCalibrationStep("type-selection");
+  }, []);
+
+  const handleCalibrationTypeSelect = useCallback((type: "manual" | "auto") => {
+    if (type === "auto") {
+      setCalibrationStep("auto-region");
+    } else {
+      setCalibrationStep("instructions");
+    }
   }, []);
 
   const handleInstructionsNext = useCallback(() => {
@@ -326,16 +356,85 @@ export function useProject(projectId: string | undefined) {
   }, []);
 
   const handleTestRunBack = useCallback(() => {
-    setCalibrationStep("instructions");
+    setCalibrationStep("type-selection");
   }, []);
 
   const handleFrameSelectionBack = useCallback(() => {
-    setCalibrationStep("test-run");
+    setCalibrationStep("type-selection");
   }, []);
 
   const handleFramesSelected = useCallback((frames: { filename: string; url: string }[]) => {
     setSelectedFrames(frames);
     setCalibrationStep("pairing");
+  }, []);
+
+  // Auto calibration handlers
+  const handleAutoRegionConfirm = useCallback(async (region: AutoCalibrationRegion) => {
+    if (!projectId) return;
+    
+    setAutoCalibrationRegion(region);
+    setCalibrationStep("auto-downloading");
+    setAutoCalibrationProgress("downloading");
+    setAutoCalibrationError(null);
+    setAutoCalibrationMessage("Загрузка карты...");
+    
+    try {
+      const result = await downloadGeotiff(projectId, region);
+      
+      if (result.success) {
+        setAutoCalibrationMessage("Карта загружена. Загрузка списка кадров...");
+        setCalibrationStep("auto-image-select");
+        setAutoCalibrationProgress("idle");
+        
+        // Fetch available frames
+        const frames = await getAutoCalibrationFrames(projectId);
+        setAutoCalibrationFrames(frames);
+      } else {
+        setAutoCalibrationError(result.error || result.message || "Ошибка загрузки карты");
+        setAutoCalibrationProgress("error");
+        setCalibrationStep("auto-region");
+      }
+    } catch (err) {
+      setAutoCalibrationError(err instanceof Error ? err.message : "Ошибка загрузки карты");
+      setAutoCalibrationProgress("error");
+      setCalibrationStep("auto-region");
+    }
+  }, [projectId]);
+
+  const handleAutoImageSelect = useCallback(async (imageFilename: string) => {
+    if (!projectId) return;
+    
+    setAutoCalibrationProgress("matching");
+    setAutoCalibrationMessage("Сопоставление изображения с картой...");
+    setAutoCalibrationError(null);
+    
+    try {
+      const result = await matchImageToGeotiff(projectId, imageFilename);
+      
+      if (result.success) {
+        setAutoCalibrationProgress("success");
+        setAutoCalibrationMessage("Калибровка успешно пройдена!");
+        
+        // Refetch project data to update calibration status
+        await refetch();
+        setCalibrationStep("complete");
+      } else {
+        setAutoCalibrationError(result.message || "Ошибка калибровки. Попробуйте другое фото или параметры снимка");
+        setAutoCalibrationProgress("error");
+      }
+    } catch (err) {
+      setAutoCalibrationError(err instanceof Error ? err.message : "Ошибка калибровки");
+      setAutoCalibrationProgress("error");
+    }
+  }, [projectId, refetch]);
+
+  const handleAutoCalibrationBack = useCallback(() => {
+    setCalibrationStep("type-selection");
+    setAutoCalibrationRegion(null);
+    setAutoCalibrationFrames([]);
+    setAutoCalibrationError(null);
+    setAutoCalibrationProgress("idle");
+    setAutoCalibrationMessage(null);
   }, []);
 
   const handleImageUpload = useCallback(
@@ -407,6 +506,7 @@ export function useProject(projectId: string | undefined) {
     startRecording,
     stopRecording,
     handleCalibrate,
+    handleCalibrationTypeSelect,
     handleInstructionsNext,
     handleTestRunSuccess,
     handleTestRunBack,
@@ -419,5 +519,14 @@ export function useProject(projectId: string | undefined) {
     refetch,
     gpsStatus, // NEW: Export GPS status
     systemStatus, // NEW: Export system status from TerraSLAM
+    // Auto calibration exports
+    autoCalibrationRegion,
+    autoCalibrationFrames,
+    autoCalibrationError,
+    autoCalibrationProgress,
+    autoCalibrationMessage,
+    handleAutoRegionConfirm,
+    handleAutoImageSelect,
+    handleAutoCalibrationBack,
   };
 }
