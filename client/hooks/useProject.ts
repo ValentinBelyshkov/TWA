@@ -273,6 +273,11 @@ export function useProject(projectId: string | undefined) {
     try {
       // Restart all components instead of just starting
       await controlTerraSLAMComponent("all", "restart", projectId);
+      
+      // Reconnect video WebSocket if it was closed
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
+        wsRef.current = null; // Trigger reconnection via useEffect
+      }
     } catch (err) {
       console.error("Failed to restart TerraSLAM:", err);
     }
@@ -284,7 +289,7 @@ export function useProject(projectId: string | undefined) {
     if (gpsStatus.lat && gpsStatus.lon) {
       setDronePath([{ lat: gpsStatus.lat, lng: gpsStatus.lon }]);
     }
-  }, [gpsStatus]);
+  }, [gpsStatus, projectId]);
 
   const stopRecording = useCallback(async () => {
     if (recordingIntervalRef.current) {
@@ -293,14 +298,20 @@ export function useProject(projectId: string | undefined) {
     }
 
     try {
+      // Stop TerraSLAM components
       await controlTerraSLAMComponent("all", "stop", projectId);
+      
+      // Close video WebSocket to stop receiving frames
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
+      }
     } catch (err) {
       console.error("Failed to stop TerraSLAM:", err);
     }
 
     setIsRecording(false);
     setTelemetry((prev) => ({ ...prev, status: "idle" }));
-  }, []);
+  }, [projectId]);
 
   const handleCalibrate = useCallback(() => {
     setCalibrationStep("instructions");
