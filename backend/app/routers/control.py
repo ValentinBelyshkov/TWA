@@ -143,11 +143,13 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
         if action.action in ["start", "restart"] and action.component in ["slam", "all"] and action.project_id:
             yaml_path = "/app/trajectory-db/real.yaml"
             load_path = None
+            save_path = None
             if project and project.calibration_status == "calibrated":
                 load_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/map.osa"
+                save_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/map"
             
-            logger.info(f"Updating SLAM YAML before {action.action}: load_filename={load_path}")
-            update_slam_yaml(yaml_path, save_filename=None, load_filename=load_path)
+            logger.info(f"Updating SLAM YAML before {action.action}: load_filename={load_path}, save_filename={save_path}")
+            update_slam_yaml(yaml_path, save_filename=save_path, load_filename=load_path)
 
         # Handle selective component control for "all"
         if action.component == "all" and action.action in ["start", "restart", "stop"]:
