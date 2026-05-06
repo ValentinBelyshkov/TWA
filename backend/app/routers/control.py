@@ -139,6 +139,16 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
                     container_frames_path = f"{SLAM_DB}/projects/{action.project_id}/frames"
                     container.exec_run(f"bash -c \"echo '{container_frames_path}' > /tmp/terraslam_folder_path\"", user="orb")
 
+        # Handle YAML update for SLAM when starting
+        if action.action in ["start", "restart"] and action.component in ["slam", "all"] and action.project_id:
+            yaml_path = "/app/trajectory-db/real.yaml"
+            load_path = None
+            if project and project.calibration_status == "calibrated":
+                load_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/map.osa"
+            
+            logger.info(f"Updating SLAM YAML before {action.action}: load_filename={load_path}")
+            update_slam_yaml(yaml_path, save_filename=None, load_filename=load_path)
+
         # Handle selective component control for "all"
         if action.component == "all" and action.action in ["start", "restart", "stop"]:
             if project and project.type == "симуляция":
@@ -453,7 +463,7 @@ async def slam_test_run(request: Request, project_id: Optional[str] = None):
         yaml_ok = update_slam_yaml(
             yaml_path=yaml_file, 
             save_filename=container_save_path,  # ← полный путь!
-            comment_load=True
+            load_filename=None
         )
         if not yaml_ok:
             raise Exception("YAML update failed")
