@@ -145,7 +145,7 @@ async def control_terraslam_component(action: ComponentAction, request: Request)
             load_path = None
             save_path = None
             if project and project.calibration_status == "calibrated":
-                load_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/map.osa"
+                load_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/map"
                 save_path = f"/home/orb/Database/projects/{action.project_id}/calibrations/map"
             
             logger.info(f"Updating SLAM YAML before {action.action}: load_filename={load_path}, save_filename={save_path}")
