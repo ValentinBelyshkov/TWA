@@ -34,7 +34,7 @@ def update_slam_yaml(
         
         # 1. Удаляем все вхождения Save и Load (включая закомментированные)
         new_lines = []
-        pattern = re.compile(r'^\s*#?\s*System\.(Save|Load)AtlasFromFile\s*:')
+        pattern = re.compile(r'^\s*#?\s*System\.(SaveAtlasToFile|LoadAtlasFromFile)\s*:')
         for line in lines:
             if not pattern.match(line):
                 new_lines.append(line)
