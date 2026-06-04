@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Trash2, Eye } from "lucide-react";
+import { Plus, Trash2, Eye, Settings } from "lucide-react";
 import { ProjectModal, ProjectType } from "@/components/ProjectModal";
 import { SettingsModal } from "@/components/SettingsModal";
 import { Button } from "@/components/ui/button";
+import { SystemStatus } from "@/components/SystemStatus";
 import {
   getProjects,
   createProject,
@@ -13,7 +14,6 @@ import {
   type Project,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { Settings } from "lucide-react";
 
 export default function Index() {
   const queryClient = useQueryClient();
@@ -154,6 +154,7 @@ export default function Index() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <SystemStatus />
             <Button
               variant="outline"
               onClick={() => setIsSettingsOpen(true)}

@@ -1,5 +1,6 @@
 import { ArrowLeft, Settings } from "lucide-react";
 import type { Project } from "@/lib/api";
+import { SystemStatus } from "./SystemStatus";
 
 interface ProjectHeaderProps {
   project: Project;
@@ -28,12 +29,15 @@ export function ProjectHeader({ project, onBack, onSettingsClick }: ProjectHeade
           </p>
         </div>
       </div>
-      <button 
-        onClick={onSettingsClick}
-        className="p-2 hover:bg-muted rounded-lg transition-colors"
-      >
-        <Settings className="w-6 h-6 text-foreground" />
-      </button>
+      <div className="flex items-center gap-3">
+        <SystemStatus />
+        <button 
+          onClick={onSettingsClick}
+          className="p-2 hover:bg-muted rounded-lg transition-colors"
+        >
+          <Settings className="w-6 h-6 text-foreground" />
+        </button>
+      </div>
     </header>
   );
 }
