@@ -65,7 +65,7 @@ export function CalibrationPointSelector({
   
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
-  const REQUIRED_POINTS = 5;
+  const REQUIRED_POINTS = 1;
   const pointNumber = completedPoints.length + 1;
 
   const startNewPoint = (mode: "image" | "map") => {
@@ -221,16 +221,16 @@ export function CalibrationPointSelector({
     const totalCompleted = Object.values(pointsByImage).reduce((acc, pts) => acc + pts.length, 0);
     
     if (effectiveImages.length > 1) {
-      return `Кадр ${currentImageIndex + 1}/${effectiveImages.length} | Точка ${completedPoints.length}/${REQUIRED_POINTS} (Всего: ${totalCompleted}/${totalRequired})`;
+      return `Кадр ${currentImageIndex + 1}/${effectiveImages.length} | Установите 1 точку близкую к центру (Всего: ${totalCompleted}/${totalRequired})`;
     }
 
     if (!pendingPoint) {
-      return `Точка ${pointNumber}/${REQUIRED_POINTS}`;
+      return `Установите точку близкую к центру`;
     }
     if (!pendingPoint.imageX) {
-      return `Точка ${pointNumber}: Выберите на изображении`;
+      return `Выберите точку на изображении`;
     }
-    return `Точка ${pointNumber}: Выберите на карте`;
+    return `Выберите соответствующую точку на карте`;
   };
 
   return (
@@ -523,7 +523,7 @@ export function CalibrationPointSelector({
             {isSaving ? "Сохранение..." : "Завершить калибровку"}
           </Button>
           <p className="text-[10px] text-center text-slate-400 mt-3">
-            Необходимо установить {REQUIRED_POINTS} пар точек для каждого изображения
+            Необходимо установить по 1 точке для каждого изображения (минимум 5 изображений)
           </p>
         </div>
       </div>

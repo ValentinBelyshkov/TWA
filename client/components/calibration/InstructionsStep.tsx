@@ -64,10 +64,10 @@ export function InstructionsStep({ onNext }: InstructionsStepProps) {
               </div>
               <div>
                 <p className="font-semibold text-foreground">
-                  Установите 5 контрольных точек
+                  Установите контрольные точки
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Сначала кликните на изображении, затем на карте
+                  Установите по 1 точке близко к центру на как минимум 5 изображениях
                 </p>
               </div>
             </div>
