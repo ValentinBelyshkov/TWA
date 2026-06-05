@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import re
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
@@ -165,8 +166,8 @@ async def save_gcp_file(request: Request, project_id: str, gcp_request: GCPSaveR
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    if len(gcp_request.points) != 5:
-        raise HTTPException(status_code=400, detail="Must provide exactly 5 points")
+    if len(gcp_request.points) != 1:
+        raise HTTPException(status_code=400, detail="Must provide exactly 1 point")
     
     project_path = get_project_path(projects_root, project_id)
     calibrations_dir = project_path / "calibrations"
@@ -231,29 +232,21 @@ async def save_all_gcp(request: Request, project_id: str, save_request: AllGCPSa
         # 2. Match points for calib.txt
         txt_path = procframe_dir / f"{Path(img_gcp.image_filename).stem}.txt"
         if txt_path.exists():
-            image_coords = []
             try:
                 with open(txt_path, 'r') as f:
-                    for line in f:
-                        parts = line.strip().split()
-                        if len(parts) >= 5:
-                            image_coords.append([float(p) for p in parts[:5]])
+                    content = f.readline().strip()
+                    # Find all numbers in the first line
+                    nums = [float(s) for s in re.findall(r"[-+]?\d*\.\d+|\d+", content)]
+                    if len(nums) >= 3:
+                        # Extract x, y, z from the numbers found (the camera pose)
+                        x, y, z = nums[:3]
+                        if img_gcp.points:
+                            point = img_gcp.points[0] # Take the first point (1 point per image now)
+                            # New format: pose(x, y, z) ; GPS(lat, lon)
+                            calib_lines.append(f"{x:.6f} {y:.6f} {z:.6f}; {point.lat:.8f} {point.lng:.8f}\n")
             except Exception as e:
                 print(f"Error reading {txt_path}: {e}")
                 continue
-                
-            if image_coords:
-                for point in img_gcp.points:
-                    closest_dist = float('inf')
-                    closest_xyz = None
-                    for u, v, x, y, z in image_coords:
-                        dist = (u - point.imageX)**2 + (v - point.imageY)**2
-                        if dist < closest_dist:
-                            closest_dist = dist
-                            closest_xyz = (x, y, z)
-                    
-                    if closest_xyz:
-                        calib_lines.append(f"{point.lat:.8f} {point.lng:.8f}; {closest_xyz[0]:.6f} {closest_xyz[1]:.6f} {closest_xyz[2]:.6f}\n")
 
     # Save calib.txt
     calib_txt_path = calibrations_dir / "calib.txt"

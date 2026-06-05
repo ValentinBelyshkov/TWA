@@ -35,19 +35,15 @@ export function CalibrationWizard({
   const [isTestRunning, setIsTestRunning] = useState(false);
   const [testRunError, setTestRunError] = useState<string | null>(null);
   const [frames, setFrames] = useState<FrameData[]>(
-    frameUrls.length === 3
+    frameUrls.length >= 5
       ? frameUrls.map((url) => ({ imageUrl: url, points: [] }))
-      : [
-          { imageUrl: "/placeholder-frame-1.jpg", points: [] },
-          { imageUrl: "/placeholder-frame-2.jpg", points: [] },
-          { imageUrl: "/placeholder-frame-3.jpg", points: [] },
-        ],
+      : Array.from({ length: 5 }).map((_, i) => ({ imageUrl: `/placeholder-frame-${i+1}.jpg`, points: [] })),
   );
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureProgress, setCaptureProgress] = useState(0);
 
   const currentFrameData = frames[currentFrame];
-  const totalPointsRequired = 5;
+  const totalPointsRequired = 1;
   const isCurrentFrameComplete =
     currentFrameData.points.length === totalPointsRequired;
   const allFramesComplete = frames.every(
@@ -131,7 +127,7 @@ export function CalibrationWizard({
           <h2 className="text-2xl font-bold mb-2">Калибровка камеры</h2>
           <p className="text-blue-100">
             {step === "calibration" 
-              ? "Установите 5 контрольных точек на каждом из 3 кадров"
+              ? "Установите по 1 контрольной точке на каждом из 5 кадров"
               : step === "test-run"
               ? "Тестовый запуск и инициализация"
               : step === "recording"
@@ -398,7 +394,7 @@ export function CalibrationWizard({
                   Назад
                 </Button>
 
-                {currentFrame < 2 ? (
+                {currentFrame < 4 ? (
                   <Button
                     onClick={() => setCurrentFrame((prev) => prev + 1)}
                     disabled={!isCurrentFrameComplete}

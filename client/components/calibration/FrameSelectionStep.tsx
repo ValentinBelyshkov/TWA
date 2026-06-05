@@ -72,7 +72,7 @@ export function FrameSelectionStep({
           </p>
         </div>
         <div className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-          Выбрано: {selectedFilenames.size}
+          Выбрано: {selectedFilenames.size} (нужно минимум 5)
         </div>
       </div>
 
@@ -145,7 +145,7 @@ export function FrameSelectionStep({
         </Button>
         <Button
           onClick={handleContinue}
-          disabled={selectedFilenames.size === 0}
+          disabled={selectedFilenames.size < 5}
           size="lg"
           className="min-w-[200px] gap-2"
         >
