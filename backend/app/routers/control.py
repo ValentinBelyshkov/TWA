@@ -393,102 +393,131 @@ async def terraslam_health():
 @router.post("/terraslam/slam/test-run")
 async def slam_test_run(request: Request, project_id: Optional[str] = None):
     t_start = time.time()
-    print(f"[TEST-RUN] Start. project_id={project_id}")
+    print(f"[TEST-RUN] Start via docker backend /slam/run. project_id={project_id}")
 
     try:
-        SHARED_DATABASE_PATH = "/app/trajectory-db"
-        yaml_file = os.path.join(SHARED_DATABASE_PATH, "real.yaml")
-        save_name = "map"
+        if not project_id:
+            return CommandResponse(success=False, output="", error="project_id is required")
 
         projects_root = get_projects_root(request)
+        if not projects_root:
+            return CommandResponse(success=False, output="", error="projects_root path not configured")
+
         project_path = get_project_path(projects_root, project_id)
-        host_calib_dir = project_path / "calibrations"
-        host_calib_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Guard directory preparation in a try-except to avoid raising a 500 on permission/file errors
+        try:
+            project_path.mkdir(parents=True, exist_ok=True)
+            host_calib_dir = project_path / "calibrations"
+            host_calib_dir.mkdir(parents=True, exist_ok=True)
 
-        procframe_dir = project_path / "procframe"
-        if procframe_dir.exists():
-            print(f"[TEST-RUN] Clearing procframe directory: {procframe_dir}")
-            for item in procframe_dir.iterdir():
-                try:
-                    if item.is_file():
-                        item.unlink()
-                    elif item.is_dir():
-                        shutil.rmtree(item)
-                except Exception as e:
-                    print(f"[TEST-RUN] Warning: Could not delete {item}: {e}")
-            print("[TEST-RUN] procframe directory cleared")
-        else:
-            procframe_dir.mkdir(parents=True, exist_ok=True)
-            print(f"[TEST-RUN] procframe directory created: {procframe_dir}")
+            procframe_dir = project_path / "procframe"
+            if procframe_dir.exists():
+                print(f"[TEST-RUN] Clearing procframe directory: {procframe_dir}")
+                for item in procframe_dir.iterdir():
+                    try:
+                        if item.is_file():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item)
+                    except Exception as e:
+                        print(f"[TEST-RUN] Warning: Could not delete {item}: {e}")
+                print("[TEST-RUN] procframe directory cleared")
+            else:
+                procframe_dir.mkdir(parents=True, exist_ok=True)
+                print(f"[TEST-RUN] procframe directory created: {procframe_dir}")
+        except Exception as e:
+            print(f"[TEST-RUN] Directory operation failed: {e}")
+            return CommandResponse(
+                success=False,
+                output="",
+                error=f"Failed to prepare project directories on host: {e}"
+            )
 
-        container_calib_dir = f"/home/orb/Database/projects/{project_id}/calibrations"
-        container_save_path = f"{container_calib_dir}/{save_name}"
+        # Read project metadata directly from JSON to be safe against schema/datetime validation mismatches
+        project_type = None
+        try:
+            metadata_path = project_path / "metadata.json"
+            if metadata_path.exists():
+                with open(metadata_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                project_type = data.get("type")
+                print(f"[TEST-RUN] Found project type in metadata.json: {project_type}")
+        except Exception as e:
+            print(f"[TEST-RUN] Warning: Failed to read metadata.json directly: {e}")
 
-        print(f"[TEST-RUN] Host calib dir: {host_calib_dir}")
-        print(f"[TEST-RUN] Container save path: {container_save_path}")
+        # Smart fallback: if project_type not found from JSON, check if frames folder exists and has content
+        if not project_type:
+            try:
+                frames_dir = project_path / "frames"
+                if frames_dir.exists() and any(frames_dir.iterdir()):
+                    project_type = "симуляция"
+                    print(f"[TEST-RUN] Frames directory found with content, defaulting project type to симуляция")
+            except Exception:
+                pass
 
-        print(f"[TEST-RUN] Updating YAML: {yaml_file}")
-        yaml_ok = update_slam_yaml(
-            yaml_path=yaml_file,
-            save_filename=container_save_path,
-            load_filename=None
-        )
-        if not yaml_ok:
-            raise Exception("YAML update failed")
-        print(f"[TEST-RUN] YAML OK. Save name: {save_name}")
-
-        project = read_project_metadata(projects_root, project_id)
-        publisher_mode = "folder" if (project and project.type == "симуляция") else "realsense"
+        publisher_mode = "folder" if project_type == "симуляция" else "realsense"
         print(f"[TEST-RUN] Publisher mode: {publisher_mode}")
 
-        frames_dir_slam = f"{SLAM_DB}/projects/{project_id}/frames"
-        print(f"[TEST-RUN] frames_dir={frames_dir_slam}")
+        # Send request to docker backend /slam/run endpoint
+        url = f"{TERRASLAM_GATEWAY_URL}/slam/run"
+        print(f"[TEST-RUN] Sending request to {url} with mode={publisher_mode}")
+        
+        gateway_data = {}
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            try:
+                res = await client.post(
+                    url,
+                    json={
+                        "project_id": project_id,
+                        "mode": publisher_mode,
+                        "duration": 15
+                    }
+                )
+                print(f"[TEST-RUN] Gateway response status: {res.status_code}")
+                if res.status_code != 200:
+                    error_detail = res.text
+                    try:
+                        error_detail = res.json().get("detail", res.text)
+                    except Exception:
+                        pass
+                    return CommandResponse(
+                        success=False,
+                        output=res.text,
+                        error=f"SLAM gateway returned error (status {res.status_code}): {error_detail}"
+                    )
+                
+                gateway_data = res.json()
+                print(f"[TEST-RUN] Gateway response data: {gateway_data}")
+            except Exception as e:
+                print(f"[TEST-RUN] Gateway connection error: {e}")
+                return CommandResponse(
+                    success=False,
+                    output="",
+                    error=f"Failed to communicate with SLAM gateway: {e}"
+                )
 
-        # Start SLAM via gateway
-        print("[TEST-RUN] Starting SLAM via gateway...")
-        slam_res = await _gateway_action("slam", "start")
-        print(f"[TEST-RUN] SLAM start: {slam_res}")
-
-        # Set publisher path and mode
-        print("[TEST-RUN] Configuring publisher...")
-        async with _gateway_client() as client:
-            await client.post("/api/v1/publisher/path", json={"path": frames_dir_slam})
-            mode_res = await client.post("/api/v1/publisher/mode", json={"mode": publisher_mode})
-            print(f"[TEST-RUN] Publisher mode switch: {mode_res.status_code}")
-
-        # Wait for SLAM to initialize
-        await asyncio.sleep(15)
-
-        # Stop everything
-        print("[TEST-RUN] Stopping components...")
-        try:
-            stop_pub = await _gateway_action(f"publisher_{publisher_mode}", "stop")
-            print(f"[TEST-RUN] Publisher stop: {stop_pub}")
-        except Exception as e:
-            print(f"[TEST-RUN] Publisher stop error: {e}")
-
-        try:
-            stop_slam = await _gateway_action("slam", "stop")
-            print(f"[TEST-RUN] SLAM stop: {stop_slam}")
-        except Exception as e:
-            print(f"[TEST-RUN] SLAM stop error: {e}")
-
-        # Check .osa
+        # Check for .osa file on host
+        save_name = "map"
         calibrations_dir = project_path / "calibrations"
         expected_file = calibrations_dir / f"{save_name}.osa"
         print(f"[TEST-RUN] Looking for: {expected_file}")
 
         if not expected_file.exists():
-            recent = [f for f in calibrations_dir.glob("*.osa") if f.stat().st_mtime > time.time() - 60]
+            recent = [f for f in calibrations_dir.glob("*.osa") if f.stat().st_mtime > time.time() - 120]
             if recent:
                 expected_file = recent[0]
                 print(f"[TEST-RUN] Found recent: {expected_file}")
             else:
                 print("[TEST-RUN] ERROR: No .osa file found!")
-                return CommandResponse(success=False, output="", error="No .osa created")
+                return CommandResponse(
+                    success=False, 
+                    output=f"Gateway results: {gateway_data.get('results', [])}", 
+                    error="No .osa file was created. Please check that video recording contains good features."
+                )
 
         print(f"[TEST-RUN] Done in {time.time() - t_start:.1f}s")
-        return CommandResponse(success=True, output="", error=None)
+        return CommandResponse(success=True, output=f"Gateway results: {gateway_data.get('results', [])}", error=None)
     except Exception as e:
         print(f"[TEST-RUN] FATAL ERROR: {e}")
         import traceback

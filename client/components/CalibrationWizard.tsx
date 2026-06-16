@@ -91,7 +91,7 @@ export function CalibrationWizard({
     setIsTestRunning(true);
     setTestRunError(null);
     try {
-      const response = await fetch(`/api/terraslam/slam/test-run?project_id=${projectId}`, {
+      const response = await fetch(`/api/control/terraslam/slam/test-run?project_id=${projectId}`, {
         method: "POST",
       });
       const data = await response.json();
