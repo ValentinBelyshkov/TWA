@@ -390,21 +390,19 @@ async def terraslam_health():
     return {"status": "unhealthy", "container_status": "degraded"}
 
 
+# Константы
+TERRASLAM_URL = "http://host.docker.internal:9000"  # или из env
+
 @router.post("/terraslam/slam/test-run")
 async def slam_test_run(request: Request, project_id: Optional[str] = None):
     t_start = time.time()
     print(f"[TEST-RUN] Start. project_id={project_id}")
 
     try:
-        SHARED_DATABASE_PATH = "/app/trajectory-db"
-        yaml_file = os.path.join(SHARED_DATABASE_PATH, "real.yaml")
-        save_name = "map"
-
         projects_root = get_projects_root(request)
         project_path = get_project_path(projects_root, project_id)
-        host_calib_dir = project_path / "calibrations"
-        host_calib_dir.mkdir(parents=True, exist_ok=True)
-
+        
+        # Очистка procframe (это локальная папка TWA, оставляем)
         procframe_dir = project_path / "procframe"
         if procframe_dir.exists():
             print(f"[TEST-RUN] Clearing procframe directory: {procframe_dir}")
@@ -421,74 +419,60 @@ async def slam_test_run(request: Request, project_id: Optional[str] = None):
             procframe_dir.mkdir(parents=True, exist_ok=True)
             print(f"[TEST-RUN] procframe directory created: {procframe_dir}")
 
-        container_calib_dir = f"/home/orb/Database/projects/{project_id}/calibrations"
-        container_save_path = f"{container_calib_dir}/{save_name}"
-
-        print(f"[TEST-RUN] Host calib dir: {host_calib_dir}")
-        print(f"[TEST-RUN] Container save path: {container_save_path}")
-
-        print(f"[TEST-RUN] Updating YAML: {yaml_file}")
-        yaml_ok = update_slam_yaml(
-            yaml_path=yaml_file,
-            save_filename=container_save_path,
-            load_filename=None
-        )
-        if not yaml_ok:
-            raise Exception("YAML update failed")
-        print(f"[TEST-RUN] YAML OK. Save name: {save_name}")
-
+        # Определяем режим
         project = read_project_metadata(projects_root, project_id)
         publisher_mode = "folder" if (project and project.type == "симуляция") else "realsense"
         print(f"[TEST-RUN] Publisher mode: {publisher_mode}")
 
-        frames_dir_slam = f"{SLAM_DB}/projects/{project_id}/frames"
-        print(f"[TEST-RUN] frames_dir={frames_dir_slam}")
+        # === ОДИН ВЫЗОВ В TERRASLAM ===
+        print("[TEST-RUN] Starting SLAM run via TerraSLAM...")
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            res = await client.post(
+                f"{TERRASLAM_URL}/slam/run",
+                json={
+                    "project_id": project_id,
+                    "mode": publisher_mode,
+                    "duration": 15
+                }
+            )
+            result = res.json()
+            print(f"[TEST-RUN] TerraSLAM response: {result}")
 
-        # Start SLAM via gateway
-        print("[TEST-RUN] Starting SLAM via gateway...")
-        slam_res = await _gateway_action("slam", "start")
-        print(f"[TEST-RUN] SLAM start: {slam_res}")
+        if not result.get("success"):
+            error = result.get("results", ["Unknown error"])[0]
+            print(f"[TEST-RUN] ERROR: {error}")
+            return CommandResponse(success=False, output="", error=str(error))
 
-        # Set publisher path and mode
-        print("[TEST-RUN] Configuring publisher...")
-        async with _gateway_client() as client:
-            await client.post("/api/v1/publisher/path", json={"path": frames_dir_slam})
-            mode_res = await client.post("/api/v1/publisher/mode", json={"mode": publisher_mode})
-            print(f"[TEST-RUN] Publisher mode switch: {mode_res.status_code}")
+        # Проверяем результат
+        osa_file = result.get("osa_file")
+        if osa_file:
+            print(f"[TEST-RUN] OSA file created: {osa_file}")
+        else:
+            print("[TEST-RUN] WARNING: No OSA file in response")
 
-        # Wait for SLAM to initialize
-        await asyncio.sleep(15)
-
-        # Stop everything
-        print("[TEST-RUN] Stopping components...")
-        try:
-            stop_pub = await _gateway_action(f"publisher_{publisher_mode}", "stop")
-            print(f"[TEST-RUN] Publisher stop: {stop_pub}")
-        except Exception as e:
-            print(f"[TEST-RUN] Publisher stop error: {e}")
-
-        try:
-            stop_slam = await _gateway_action("slam", "stop")
-            print(f"[TEST-RUN] SLAM stop: {stop_slam}")
-        except Exception as e:
-            print(f"[TEST-RUN] SLAM stop error: {e}")
-
-        # Check .osa
+        # Проверяем локальную папку (volume mapping должен синхронизировать)
         calibrations_dir = project_path / "calibrations"
-        expected_file = calibrations_dir / f"{save_name}.osa"
-        print(f"[TEST-RUN] Looking for: {expected_file}")
+        expected_file = calibrations_dir / "map.osa"
+        
+        # Ждём, если файл ещё не появился (async fs sync)
+        for _ in range(10):
+            if expected_file.exists():
+                break
+            await asyncio.sleep(1)
+            print(f"[TEST-RUN] Waiting for .osa file...")
 
         if not expected_file.exists():
-            recent = [f for f in calibrations_dir.glob("*.osa") if f.stat().st_mtime > time.time() - 60]
+            recent = [f for f in calibrations_dir.glob("*.osa") if f.stat().st_mtime > time.time() - 120]
             if recent:
                 expected_file = recent[0]
                 print(f"[TEST-RUN] Found recent: {expected_file}")
             else:
-                print("[TEST-RUN] ERROR: No .osa file found!")
+                print("[TEST-RUN] ERROR: No .osa file found locally!")
                 return CommandResponse(success=False, output="", error="No .osa created")
 
         print(f"[TEST-RUN] Done in {time.time() - t_start:.1f}s")
         return CommandResponse(success=True, output="", error=None)
+
     except Exception as e:
         print(f"[TEST-RUN] FATAL ERROR: {e}")
         import traceback
