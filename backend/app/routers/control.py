@@ -397,31 +397,66 @@ async def slam_test_run(request: Request, project_id: Optional[str] = None):
 
     try:
         if not project_id:
-            raise HTTPException(400, "project_id is required")
+            return CommandResponse(success=False, output="", error="project_id is required")
 
         projects_root = get_projects_root(request)
+        if not projects_root:
+            return CommandResponse(success=False, output="", error="projects_root path not configured")
+
         project_path = get_project_path(projects_root, project_id)
-        host_calib_dir = project_path / "calibrations"
-        host_calib_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Guard directory preparation in a try-except to avoid raising a 500 on permission/file errors
+        try:
+            project_path.mkdir(parents=True, exist_ok=True)
+            host_calib_dir = project_path / "calibrations"
+            host_calib_dir.mkdir(parents=True, exist_ok=True)
 
-        procframe_dir = project_path / "procframe"
-        if procframe_dir.exists():
-            print(f"[TEST-RUN] Clearing procframe directory: {procframe_dir}")
-            for item in procframe_dir.iterdir():
-                try:
-                    if item.is_file():
-                        item.unlink()
-                    elif item.is_dir():
-                        shutil.rmtree(item)
-                except Exception as e:
-                    print(f"[TEST-RUN] Warning: Could not delete {item}: {e}")
-            print("[TEST-RUN] procframe directory cleared")
-        else:
-            procframe_dir.mkdir(parents=True, exist_ok=True)
-            print(f"[TEST-RUN] procframe directory created: {procframe_dir}")
+            procframe_dir = project_path / "procframe"
+            if procframe_dir.exists():
+                print(f"[TEST-RUN] Clearing procframe directory: {procframe_dir}")
+                for item in procframe_dir.iterdir():
+                    try:
+                        if item.is_file():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item)
+                    except Exception as e:
+                        print(f"[TEST-RUN] Warning: Could not delete {item}: {e}")
+                print("[TEST-RUN] procframe directory cleared")
+            else:
+                procframe_dir.mkdir(parents=True, exist_ok=True)
+                print(f"[TEST-RUN] procframe directory created: {procframe_dir}")
+        except Exception as e:
+            print(f"[TEST-RUN] Directory operation failed: {e}")
+            return CommandResponse(
+                success=False,
+                output="",
+                error=f"Failed to prepare project directories on host: {e}"
+            )
 
-        project = read_project_metadata(projects_root, project_id)
-        publisher_mode = "folder" if (project and project.type == "симуляция") else "realsense"
+        # Read project metadata directly from JSON to be safe against schema/datetime validation mismatches
+        project_type = None
+        try:
+            metadata_path = project_path / "metadata.json"
+            if metadata_path.exists():
+                with open(metadata_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                project_type = data.get("type")
+                print(f"[TEST-RUN] Found project type in metadata.json: {project_type}")
+        except Exception as e:
+            print(f"[TEST-RUN] Warning: Failed to read metadata.json directly: {e}")
+
+        # Smart fallback: if project_type not found from JSON, check if frames folder exists and has content
+        if not project_type:
+            try:
+                frames_dir = project_path / "frames"
+                if frames_dir.exists() and any(frames_dir.iterdir()):
+                    project_type = "симуляция"
+                    print(f"[TEST-RUN] Frames directory found with content, defaulting project type to симуляция")
+            except Exception:
+                pass
+
+        publisher_mode = "folder" if project_type == "симуляция" else "realsense"
         print(f"[TEST-RUN] Publisher mode: {publisher_mode}")
 
         # Send request to docker backend /slam/run endpoint
@@ -446,13 +481,21 @@ async def slam_test_run(request: Request, project_id: Optional[str] = None):
                         error_detail = res.json().get("detail", res.text)
                     except Exception:
                         pass
-                    raise Exception(f"Gateway /slam/run failed: {error_detail}")
+                    return CommandResponse(
+                        success=False,
+                        output=res.text,
+                        error=f"SLAM gateway returned error (status {res.status_code}): {error_detail}"
+                    )
                 
                 gateway_data = res.json()
                 print(f"[TEST-RUN] Gateway response data: {gateway_data}")
             except Exception as e:
                 print(f"[TEST-RUN] Gateway connection error: {e}")
-                raise Exception(f"Failed to communicate with SLAM gateway: {e}")
+                return CommandResponse(
+                    success=False,
+                    output="",
+                    error=f"Failed to communicate with SLAM gateway: {e}"
+                )
 
         # Check for .osa file on host
         save_name = "map"
